@@ -1,0 +1,1415 @@
+{
+  "version": 1,
+  "warning": "Test-only private keys and certificates. Never use this material for real approvals.",
+  "now": 1792000000,
+  "agentId": "123e4567-e89b-12d3-a456-426614174000",
+  "description": {
+    "canonical": "Canonical request bytes; params object keys must be ASCII. error:true means params normalization failed. Raw numeric literals are preserved in input.params.",
+    "decisions": "Each case gets a fresh Verifier; sequence shares that state in order. job.params is raw input JSON. Time uses step.now, or top-level now when absent.",
+    "keys": "Test-only key material is indexed by keyId; hmac, ed25519, and ecdsaP256 are direct keyId maps.",
+    "signatures": "ECDSA deterministic:false is verification-only; derSig is DER and must be rejected in favor of P1363.",
+    "totp": "code8 preserves the original RFC 8-digit result; code is its six-digit suffix.",
+    "x509": "CA PEM values are named in cas; leaf certChain is standard-base64 DER, leaf first."
+  },
+  "canonical": [
+    {
+      "name": "empty-params-ref-null",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {},
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{},\"ref\":null,\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "string-integers-bool",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "z": "text",
+          "p": -7,
+          "b": true,
+          "n": 0
+        },
+        "ref": "main",
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"b\":true,\"n\":0,\"p\":-7,\"z\":\"text\"},\"ref\":\"main\",\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "unicode-and-escapes",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "s": "\u003c\u003e\u0026\u2028\u2029\n\t\b\f\r\"\\ 한글 😀"
+        },
+        "ref": "release/한글",
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"s\":\"\\u003c\\u003e\\u0026\\u2028\\u2029\\n\\t\\b\\f\\r\\\"\\\\ 한글 😀\"},\"ref\":\"release/한글\",\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "sorted-keys",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "z": 1,
+          "a": {
+            "z": 2,
+            "a": 3
+          },
+          "m": [
+            {
+              "b": 1,
+              "a": 0
+            }
+          ]
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"a\":{\"a\":3,\"z\":2},\"m\":[{\"a\":0,\"b\":1}],\"z\":1},\"ref\":null,\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "integral-number-normalization",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "f": 1.0,
+          "e": 1e2,
+          "negativeZero": -0,
+          "negative": -3
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"e\":100,\"f\":1,\"negative\":-3,\"negativeZero\":0},\"ref\":null,\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "system-fields-removed",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "DEPLITE_JOB_ID": "server",
+          "DEPLITE_BAD": 1.5,
+          "registry_token": 9007199254740992,
+          "ok": 1,
+          "nested": {
+            "DEPLITE_KEEP": 2
+          }
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"nested\":{\"DEPLITE_KEEP\":2},\"ok\":1},\"ref\":null,\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}"
+    },
+    {
+      "name": "fraction-error",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "value": 1.5
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "error": true
+    },
+    {
+      "name": "unsafe-integer-error",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "value": 9007199254740992
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "error": true
+    },
+    {
+      "name": "unsafe-exponent-error",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "value": 1e40
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "error": true
+    },
+    {
+      "name": "non-ascii-object-key-error",
+      "input": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "meta": {
+            "é": "x"
+          }
+        },
+        "ref": null,
+        "nonce": "EREREREREREREREREREREQ",
+        "ts": 1792000000
+      },
+      "error": true
+    }
+  ],
+  "keys": {
+    "hmac": {
+      "test-hmac": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    },
+    "ed25519": {
+      "signer-ed": {
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJC\n-----END PRIVATE KEY-----\n",
+        "publicKeyPEM": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAIVL40Zt5HSRFMkLhXy6rbLfP+ntqXtMAl5YOBpiB2xI=\n-----END PUBLIC KEY-----\n"
+      }
+    },
+    "ecdsaP256": {
+      "signer-ec": {
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAGhRANCAARrF9Hy4SxCR/i85uVjpEDydwN9gS3r\nM6D0oTlF2JjClk/jQuL+Gn+bjufrSnwPnhYrzjNXazFezsu2QGg3v1H1\n-----END PRIVATE KEY-----\n",
+        "publicKeyPEM": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaxfR8uEsQkf4vOblY6RA8ncDfYEt\n6zOg9KE5RdiYwpZP40Li/hp/m47n60p8D54WK84zV2sxXs7LtkBoN79R9Q==\n-----END PUBLIC KEY-----\n"
+      }
+    },
+    "totpSecretBase32": "ORUGS4ZANFZSAYJAORSXG5BAORXXI4BAONSWG4TFOQ"
+  },
+  "x509": {
+    "cas": {
+      "intermediateCA": "-----BEGIN CERTIFICATE-----\nMIIBuzCCAWGgAwIBAgIQb+Es1A2ZRg/iVwkyhc15ezAKBggqhkjOPQQDAjAdMRsw\nGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMTYxMDE2MTc0NjQwWhcNNDAw\nNjIyMTc0NjQwWjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0\nZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF7L5NGmMwpEyPfvlR1L8WXmxrch\n762phftBZhvG5/1shzRkDEmY/343SwbOGmSi7NgqsDY4T7g9mnmxJ6J9UDKjezB5\nMA4GA1UdDwEB/wQEAwIBBjATBgNVHSUEDDAKBggrBgEFBQcDAzASBgNVHRMBAf8E\nCDAGAQH/AgEBMB0GA1UdDgQWBBT8LLcBKUUvk2QCuZyc3qJnQSsSgDAfBgNVHSME\nGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiEAst2f\nP8sdSLK3/r2BzCya8GRzXqTOiCeCLFTs5LHZEq8CIDd4BH5QoxT8FNHrF2JKHuQ8\nMMJBpj0Zv4KBNyqhLyMn\n-----END CERTIFICATE-----\n",
+      "otherCA": "-----BEGIN CERTIFICATE-----\nMIIBnDCCAUKgAwIBAgIQcoEIRBd2tBh4MLyFN/d95zAKBggqhkjOPQQDAjAiMSAw\nHgYDVQQDExdVbnRydXN0ZWQgQXBwcm92YWwgUm9vdDAeFw0xNjEwMTYxNzQ2NDBa\nFw00MDA2MjIxNzQ2NDBaMCIxIDAeBgNVBAMTF1VudHJ1c3RlZCBBcHByb3ZhbCBS\nb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4lNKNTLQj7ugLd5lnuYr0AMf\n4tt4VZbvUJMCRGsDCFLg8VdaTGM8xxnf7l/ahi12TvyWw/MO4AVcQsI/GE7YxqNa\nMFgwDgYDVR0PAQH/BAQDAgEGMBMGA1UdJQQMMAoGCCsGAQUFBwMDMBIGA1UdEwEB\n/wQIMAYBAf8CAQEwHQYDVR0OBBYEFIakFPWEVO/LdP6Mb2fIWtP+qgCmMAoGCCqG\nSM49BAMCA0gAMEUCICYTZuhh7OAXX0cfcyoOL8mE7XBver2OfDyhJXtw0eiTAiEA\n5v0kE1x2/dSaMXz9gEJxU/ebBdGemidBOd2fi31JY4U=\n-----END CERTIFICATE-----\n",
+      "rootCA": "-----BEGIN CERTIFICATE-----\nMIIBkTCCATigAwIBAgIQWKUYXkLOdZcaSNJS/osuvzAKBggqhkjOPQQDAjAdMRsw\nGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMTYxMDE2MTc0NjQwWhcNNDAw\nNjIyMTc0NjQwWjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwWTATBgcq\nhkjOPQIBBggqhkjOPQMBBwNCAAR88nsYjQNPfopSOAMEtRrDwIlp4nfyGzWmC0j8\nR2aZeAd3VRDbjtBAKT2axp90MNu6fa3mPOmCKZ4Et50ieHPRo1owWDAOBgNVHQ8B\nAf8EBAMCAQYwEwYDVR0lBAwwCgYIKwYBBQUHAwMwEgYDVR0TAQH/BAgwBgEB/wIB\nATAdBgNVHQ4EFgQUW0cXsE6s7VfE7KFyjKmnHTsiQ0AwCgYIKoZIzj0EAwIDRwAw\nRAIgZBqPytR7JylvpGwgkk2UqPGIF+jIIu9r+sGWCUsA/p8CIGDtiU55nEqzAPzA\nZwdQoTtXB+F1SrX11BaDH9OkHMKv\n-----END CERTIFICATE-----\n"
+    },
+    "leaves": {
+      "dev-carol": {
+        "alg": "ecdsa-p256-sha256",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAmhRANCAATqaNe2/t8LcYeJONUdcfhyngrLjCxt\n+LPXnopLkJSe4ConRMlyyfznhwFKlkqOoMhNcU/qpN6CP+haIkpN0Ej6\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBjzCCATSgAwIBAgIRAKjJw0dcn887JtX52SGPqHkwCgYIKoZIzj0EAwIwJTEjMCEGA1UEAxMaQXBwcm92YWwgVGVzdCBJbnRlcm1lZGlhdGUwHhcNMjYwOTE0MTc0NjQwWhcNMzYxMDExMTc0NjQwWjAUMRIwEAYDVQQDEwlkZXYtY2Fyb2wwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATqaNe2/t8LcYeJONUdcfhyngrLjCxt+LPXnopLkJSe4ConRMlyyfznhwFKlkqOoMhNcU/qpN6CP+haIkpN0Ej6o1YwVDAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBT8LLcBKUUvk2QCuZyc3qJnQSsSgDAKBggqhkjOPQQDAgNJADBGAiEAtEz8cWOwBlSwdooh1/l71e047xRWQe4kW3OMWJ7T72oCIQCMTsvQ9OLd5hvkKvjH/IYhzPT3blMsYDRKYKDTksz9Tg==",
+          "MIIBuzCCAWGgAwIBAgIQb+Es1A2ZRg/iVwkyhc15ezAKBggqhkjOPQQDAjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMTYxMDE2MTc0NjQwWhcNNDAwNjIyMTc0NjQwWjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0ZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF7L5NGmMwpEyPfvlR1L8WXmxrch762phftBZhvG5/1shzRkDEmY/343SwbOGmSi7NgqsDY4T7g9mnmxJ6J9UDKjezB5MA4GA1UdDwEB/wQEAwIBBjATBgNVHSUEDDAKBggrBgEFBQcDAzASBgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBT8LLcBKUUvk2QCuZyc3qJnQSsSgDAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiEAst2fP8sdSLK3/r2BzCya8GRzXqTOiCeCLFTs5LHZEq8CIDd4BH5QoxT8FNHrF2JKHuQ8MMJBpj0Zv4KBNyqhLyMn"
+        ]
+      },
+      "expired": {
+        "alg": "ecdsa-p256-sha256",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAahRANCAASwGhcqdqRgLJLTJCy4l93jAkx0Deuy\nFbTGsKrpPCKRqehcEHQyN9rVb+wOLfunA3kcAPdwHH4Wvf18SFOPx3/i\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBiTCCAS+gAwIBAgIRAMspTjd4haN0HMWL/X9Y8MYwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI1MTAxNDE3NDY0MFoXDTI2MTAxMzE3NDY0MFowFzEVMBMGA1UEAxMMZXhwaXJlZC11c2VyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6TwikanoXBB0Mjfa1W/sDi37pwN5HAD3cBx+Fr39fEhTj8d/4qNWMFQwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUW0cXsE6s7VfE7KFyjKmnHTsiQ0AwCgYIKoZIzj0EAwIDSAAwRQIhAPJpSuVGjG2QOtEC2UekURGL5hJwv/OFDWABazZw+tRRAiBKotXYEeKWLyYThhAWB8o+6Srl6NDjggTBBDECZWD8AQ=="
+        ]
+      },
+      "no-digital-signature": {
+        "alg": "ecdsa-p256-sha256",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAehRANCAASOUztvoL97RiW7MGZ8Aftgfvn4uKgP\n71swBihwMYeyo3PrHb3gMxg2bQafg6b1kABTxzYzywQbIcVeGobB9AC0\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBiDCCAS6gAwIBAgIQEo/V6fgYtjAw6l7TVNhYgTAKBggqhkjOPQQDAjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMjYwOTE0MTc0NjQwWhcNMzYxMDExMTc0NjQwWjAXMRUwEwYDVQQDEwxuby1zaWduLXVzZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASOUztvoL97RiW7MGZ8Aftgfvn4uKgP71swBihwMYeyo3PrHb3gMxg2bQafg6b1kABTxzYzywQbIcVeGobB9AC0o1YwVDAOBgNVHQ8BAf8EBAMCBSAwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiBp/14v0KOj1gIhw+nHBB7ZRihPzITSnKP78j1pObBhHwIhAI2UAmuu4u94Xf3bR+VKkGi8+rXrKN7L70NOADJszgeQ"
+        ]
+      },
+      "ops-alice": {
+        "alg": "ecdsa-p256-sha256",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAWhRANCAARRWQt6UVFA0teEyFYIZo/f74yC/R9b\n5SQhVUoNw9Az7eDBfaiQSnJ9iuG/Nr+KeSYNAS8A1NgIiNHQu0T9oW2k\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBjjCCATOgAwIBAgIQAvfd/mEfWwnph/AC2rzWgzAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0ZTAeFw0yNjA5MTQxNzQ2NDBaFw0zNjEwMTExNzQ2NDBaMBQxEjAQBgNVBAMTCW9wcy1hbGljZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFFZC3pRUUDS14TIVghmj9/vjIL9H1vlJCFVSg3D0DPt4MF9qJBKcn2K4b82v4p5Jg0BLwDU2AiI0dC7RP2hbaSjVjBUMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFPwstwEpRS+TZAK5nJzeomdBKxKAMAoGCCqGSM49BAMCA0kAMEYCIQDHinFYJEziQsB0gitMC7LgO/g1BYc5lecCD6DcI8NYYwIhANHAncHv4T9LvIC78IWLRxAnzPJN5hu+nu0MpdU7lVye",
+          "MIIBuzCCAWGgAwIBAgIQb+Es1A2ZRg/iVwkyhc15ezAKBggqhkjOPQQDAjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMTYxMDE2MTc0NjQwWhcNNDAwNjIyMTc0NjQwWjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0ZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF7L5NGmMwpEyPfvlR1L8WXmxrch762phftBZhvG5/1shzRkDEmY/343SwbOGmSi7NgqsDY4T7g9mnmxJ6J9UDKjezB5MA4GA1UdDwEB/wQEAwIBBjATBgNVHSUEDDAKBggrBgEFBQcDAzASBgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBT8LLcBKUUvk2QCuZyc3qJnQSsSgDAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiEAst2fP8sdSLK3/r2BzCya8GRzXqTOiCeCLFTs5LHZEq8CIDd4BH5QoxT8FNHrF2JKHuQ8MMJBpj0Zv4KBNyqhLyMn"
+        ]
+      },
+      "ops-bob": {
+        "alg": "ed25519",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJC\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBcjCCARmgAwIBAgIRAJQtJ4dO7teqg97Uj5qLA7kwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI2MDkxNDE3NDY0MFoXDTM2MTAxMTE3NDY0MFowEjEQMA4GA1UEAxMHb3BzLWJvYjAqMAUGAytlcAMhACFS+NGbeR0kRTJC4V8uq2y3z/p7al7TAJeWDgaYgdsSo3QwcjAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAcBgNVHREEFTATghFhcHByb3ZlcnMuZXhhbXBsZTAKBggqhkjOPQQDAgNHADBEAiB/Pqhyh/4VkReJgYRfcukR2vAU0pM3fUyjKJaVhKkNnwIgUOHcd1ZflUC2rFlBhxUbpOCYaxVmyJ1z4MiOU71JxD4="
+        ]
+      },
+      "other-ca": {
+        "alg": "ecdsa-p256-sha256",
+        "privateKeyPEM": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAihRANCAARi2XedvumwU0BCdC06tUytwdI4mA/O\nl9u03Z3B22+zk61azL2R6dgkT/FddxFnzuCi7VH2u+dqeNpUCmoPCZV+\n-----END PRIVATE KEY-----\n",
+        "certChain": [
+          "MIIBjjCCATSgAwIBAgIQToKSIyvnHrHy3vbiXYO+WjAKBggqhkjOPQQDAjAiMSAwHgYDVQQDExdVbnRydXN0ZWQgQXBwcm92YWwgUm9vdDAeFw0yNjA5MTQxNzQ2NDBaFw0zNjEwMTExNzQ2NDBaMBgxFjAUBgNVBAMTDW90aGVyLWNhLXVzZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARi2XedvumwU0BCdC06tUytwdI4mA/Ol9u03Z3B22+zk61azL2R6dgkT/FddxFnzuCi7VH2u+dqeNpUCmoPCZV+o1YwVDAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBSGpBT1hFTvy3T+jG9nyFrT/qoApjAKBggqhkjOPQQDAgNIADBFAiA6yjwkYo7XgxVBhMY11NFJw+Ka0X1EryeVyKkYrDKLKQIhANVwTh3YrL3u4NGfMrBiOBoLJPnL3SJNuGn5RULa8gBm"
+        ]
+      }
+    }
+  },
+  "signatures": [
+    {
+      "name": "hmac-sha256",
+      "method": "hmac",
+      "keyId": "test-hmac",
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"a\":1,\"message\":\"approval vectors\"},\"ref\":\"refs/main\",\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}",
+      "sig": "2uYKT6DdjrL2xt3T7UTT2fjqHY1s5wub2zUxedm5WQ0",
+      "deterministic": true
+    },
+    {
+      "name": "ed25519",
+      "alg": "ed25519",
+      "keyId": "signer-ed",
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"a\":1,\"message\":\"approval vectors\"},\"ref\":\"refs/main\",\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}",
+      "sig": "Ikku4An0LOvi3iJ61TjlSK3z9TBpPFOb9V5CCk7VQbggu9jS0pjTgqo8WZbZ_2VPKdEhg5LwCuykFQ1EJcSXAg",
+      "deterministic": true
+    },
+    {
+      "name": "ecdsa-p256-p1363",
+      "alg": "ecdsa-p256-sha256",
+      "keyId": "signer-ec",
+      "canonical": "{\"agentId\":\"123e4567-e89b-12d3-a456-426614174000\",\"nonce\":\"EREREREREREREREREREREQ\",\"params\":{\"a\":1,\"message\":\"approval vectors\"},\"ref\":\"refs/main\",\"ts\":1792000000,\"v\":1,\"workflow\":\"deploy\"}",
+      "sig": "PbTipinUnwUO9hDrD76Zl-k8a2GaU0pj6r0aR3RQHyHCfhEFpcaAQjmcvblK8wHxhDo-uA9rpjOVheG8UjNVRQ",
+      "deterministic": false,
+      "derSig": "MEUCID204qYp1J8FDvYQ6w--mZfpPGthmlNKY-q9Gkd0UB8hAiEAwn4RBaXGgEI5nL25SvMB8YQ6PrgPa6YzlYXhvFIzVUU"
+    }
+  ],
+  "totp": [
+    {
+      "name": "rfc6238-59",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 59,
+      "code": "287082",
+      "code8": "94287082"
+    },
+    {
+      "name": "rfc6238-1111111109",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 1111111109,
+      "code": "081804",
+      "code8": "07081804"
+    },
+    {
+      "name": "rfc6238-1111111111",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 1111111111,
+      "code": "050471",
+      "code8": "14050471"
+    },
+    {
+      "name": "rfc6238-1234567890",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 1234567890,
+      "code": "005924",
+      "code8": "89005924"
+    },
+    {
+      "name": "rfc6238-2000000000",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 2000000000,
+      "code": "279037",
+      "code8": "69279037"
+    },
+    {
+      "name": "rfc6238-20000000000",
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "timestamp": 20000000000,
+      "code": "353130",
+      "code8": "65353130"
+    },
+    {
+      "name": "node-now",
+      "secretBase32": "ORUGS4ZANFZSAYJAORSXG5BAORXXI4BAONSWG4TFOQ",
+      "timestamp": 1792000000,
+      "code": "378180"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "totp-ok",
+      "policy": {
+        "totp": true,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "378180",
+            "method": "totp"
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "totp-wrong-code",
+      "policy": {
+        "totp": true,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "totp-step-replay",
+      "policy": {
+        "totp": true,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "378180",
+            "method": "totp"
+          },
+          "expect": "ok"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "378180",
+            "method": "totp"
+          },
+          "expect": "approval_replayed"
+        }
+      ]
+    },
+    {
+      "name": "totp-workflow-throttle",
+      "policy": {
+        "totp": true,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "000000",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "378180",
+            "method": "totp"
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "method-not-allowed",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "code": "378180",
+            "method": "totp"
+          },
+          "expect": "approval_method_not_allowed"
+        }
+      ]
+    },
+    {
+      "name": "hmac-ok",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "AQEBAQEBAQEBAQEBAQEBAQ",
+            "sig": "iCxZ7-8bXRhVlnQLmUMJ3nKQ4oLPR8kNrF2B_s9HXjM",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "hmac-bad-signature",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "AgICAgICAgICAgICAgICAg",
+            "sig": "fV2KEHk8TJxHPffWUxqhmXoBskFuAGBqE6NPZ6FTmR8",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "hmac-unregistered-key",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "missing",
+            "method": "hmac",
+            "nonce": "AwMDAwMDAwMDAwMDAwMDAw",
+            "sig": "iy__oGPNGQHHsobYnH4vX8Q4erHKnZoxAU4H-BDnLRI",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "hmac-expired",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "BAQEBAQEBAQEBAQEBAQEBA",
+            "sig": "D8ZJ2CxAzLzuEPfkQI0WUBmBLNHcYupZIHcCA5_sYUQ",
+            "ts": 1791999699
+          },
+          "expect": "approval_expired"
+        }
+      ]
+    },
+    {
+      "name": "hmac-future-within-window",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "BQUFBQUFBQUFBQUFBQUFBQ",
+            "sig": "gYfU1u7C_2HVzPkEvDSkDlKRzeFXwHoiVu_8PVbtKJs",
+            "ts": 1792000299
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "hmac-nonce-replay",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "BgYGBgYGBgYGBgYGBgYGBg",
+            "sig": "3FhjQX4MbweAXegDAg25p6o4EAX5T3JPNSMUOG8q5Po",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        },
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "BgYGBgYGBgYGBgYGBgYGBg",
+            "sig": "3FhjQX4MbweAXegDAg25p6o4EAX5T3JPNSMUOG8q5Po",
+            "ts": 1792000000
+          },
+          "expect": "approval_replayed"
+        }
+      ]
+    },
+    {
+      "name": "hmac-short-nonce",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "VVVVVVVVVVVVVVVVVVVV",
+            "sig": "PgL_Zt72LFSDXArp6M052zuuAKiROHrv-wy5a_lqNQU",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "ed25519-key-id",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [
+          "signer-ed"
+        ],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ed25519",
+            "keyId": "signer-ed",
+            "method": "signature",
+            "nonce": "BwcHBwcHBwcHBwcHBwcHBw",
+            "sig": "PzzxNp3sqR8fr407vcAwpmPA214bN0nXuy3rGyJcbvM5Lp_72GwWqWhdTl8Y6rcMGU_iNC647Zhbdc9lmzCSBA",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "ecdsa-key-id",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [
+          "signer-ec"
+        ],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "keyId": "signer-ec",
+            "method": "signature",
+            "nonce": "CAgICAgICAgICAgICAgICA",
+            "sig": "08HyafjtHvWCQZ9MGpD_NyVONAmLhrl3-gpHMlIIa7_hYJyyw6eHLvUllgLF7vmah_zoeEkboqVV9xinaM1nNw",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "ecdsa-DER-signature-rejected",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [
+          "signer-ec"
+        ],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "keyId": "signer-ec",
+            "method": "signature",
+            "nonce": "CQkJCQkJCQkJCQkJCQkJCQ",
+            "sig": "MEUCIQDvCIkqQtppX4BXOW9dXqwwkAdeOXEOVA-VkZhSn-wtGwIgM-sdl4EZnQknGZxc6pyrJ2fHbN8XXyqimsICLwm3bxw",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "algorithm-key-mismatch",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [
+          "signer-ed"
+        ],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "keyId": "signer-ed",
+            "method": "signature",
+            "nonce": "CgoKCgoKCgoKCgoKCgoKCg",
+            "sig": "xl42DjYtjrTiT58es6eDds6xTj1CzALCYR9qlc0CxFS4XejmavKGb0ESUNYvCcKLk5VCgrl4P0g2oBBB5cq6DQ",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "x509-ecdsa-intermediate",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "certChain": [
+              "MIIBjjCCATOgAwIBAgIQAvfd/mEfWwnph/AC2rzWgzAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0ZTAeFw0yNjA5MTQxNzQ2NDBaFw0zNjEwMTExNzQ2NDBaMBQxEjAQBgNVBAMTCW9wcy1hbGljZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFFZC3pRUUDS14TIVghmj9/vjIL9H1vlJCFVSg3D0DPt4MF9qJBKcn2K4b82v4p5Jg0BLwDU2AiI0dC7RP2hbaSjVjBUMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFPwstwEpRS+TZAK5nJzeomdBKxKAMAoGCCqGSM49BAMCA0kAMEYCIQDHinFYJEziQsB0gitMC7LgO/g1BYc5lecCD6DcI8NYYwIhANHAncHv4T9LvIC78IWLRxAnzPJN5hu+nu0MpdU7lVye",
+              "MIIBuzCCAWGgAwIBAgIQb+Es1A2ZRg/iVwkyhc15ezAKBggqhkjOPQQDAjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMTYxMDE2MTc0NjQwWhcNNDAwNjIyMTc0NjQwWjAlMSMwIQYDVQQDExpBcHByb3ZhbCBUZXN0IEludGVybWVkaWF0ZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF7L5NGmMwpEyPfvlR1L8WXmxrch762phftBZhvG5/1shzRkDEmY/343SwbOGmSi7NgqsDY4T7g9mnmxJ6J9UDKjezB5MA4GA1UdDwEB/wQEAwIBBjATBgNVHSUEDDAKBggrBgEFBQcDAzASBgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBT8LLcBKUUvk2QCuZyc3qJnQSsSgDAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiEAst2fP8sdSLK3/r2BzCya8GRzXqTOiCeCLFTs5LHZEq8CIDd4BH5QoxT8FNHrF2JKHuQ8MMJBpj0Zv4KBNyqhLyMn"
+            ],
+            "method": "signature",
+            "nonce": "CwsLCwsLCwsLCwsLCwsLCw",
+            "sig": "NBMDnNfXcbQcjjb05owS_I4NzSKcjXTx8MVEvEON_kz8lhyCrJMZCJJDPgMxd7fIXuz4aoCZ5e0sxqkuoMBogg",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "x509-ed25519",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ed25519",
+            "certChain": [
+              "MIIBcjCCARmgAwIBAgIRAJQtJ4dO7teqg97Uj5qLA7kwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI2MDkxNDE3NDY0MFoXDTM2MTAxMTE3NDY0MFowEjEQMA4GA1UEAxMHb3BzLWJvYjAqMAUGAytlcAMhACFS+NGbeR0kRTJC4V8uq2y3z/p7al7TAJeWDgaYgdsSo3QwcjAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAcBgNVHREEFTATghFhcHByb3ZlcnMuZXhhbXBsZTAKBggqhkjOPQQDAgNHADBEAiB/Pqhyh/4VkReJgYRfcukR2vAU0pM3fUyjKJaVhKkNnwIgUOHcd1ZflUC2rFlBhxUbpOCYaxVmyJ1z4MiOU71JxD4="
+            ],
+            "method": "signature",
+            "nonce": "DAwMDAwMDAwMDAwMDAwMDA",
+            "sig": "w-7itRu7R9Uzd5q4uzaSFFvoW-U1TvCRWRoUzxhwkxzma8aWE_VtEMHn6S3ILw1Wa9uxGs7cVCXCfPWh7vuRDQ",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "x509-expired",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "certChain": [
+              "MIIBiTCCAS+gAwIBAgIRAMspTjd4haN0HMWL/X9Y8MYwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI1MTAxNDE3NDY0MFoXDTI2MTAxMzE3NDY0MFowFzEVMBMGA1UEAxMMZXhwaXJlZC11c2VyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6TwikanoXBB0Mjfa1W/sDi37pwN5HAD3cBx+Fr39fEhTj8d/4qNWMFQwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUW0cXsE6s7VfE7KFyjKmnHTsiQ0AwCgYIKoZIzj0EAwIDSAAwRQIhAPJpSuVGjG2QOtEC2UekURGL5hJwv/OFDWABazZw+tRRAiBKotXYEeKWLyYThhAWB8o+6Srl6NDjggTBBDECZWD8AQ=="
+            ],
+            "method": "signature",
+            "nonce": "DQ0NDQ0NDQ0NDQ0NDQ0NDQ",
+            "sig": "UVSh_171vbvbCuq6MG7Zqr7HFuEaTIE_zLUHQMO9BwYeDfn4aRHJf08b9FlhajaB3jcCiPAyq1Tq9GabKTcFrw",
+            "ts": 1792000000
+          },
+          "expect": "approval_untrusted_cert"
+        }
+      ]
+    },
+    {
+      "name": "x509-other-CA",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "certChain": [
+              "MIIBjjCCATSgAwIBAgIQToKSIyvnHrHy3vbiXYO+WjAKBggqhkjOPQQDAjAiMSAwHgYDVQQDExdVbnRydXN0ZWQgQXBwcm92YWwgUm9vdDAeFw0yNjA5MTQxNzQ2NDBaFw0zNjEwMTExNzQ2NDBaMBgxFjAUBgNVBAMTDW90aGVyLWNhLXVzZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARi2XedvumwU0BCdC06tUytwdI4mA/Ol9u03Z3B22+zk61azL2R6dgkT/FddxFnzuCi7VH2u+dqeNpUCmoPCZV+o1YwVDAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBSGpBT1hFTvy3T+jG9nyFrT/qoApjAKBggqhkjOPQQDAgNIADBFAiA6yjwkYo7XgxVBhMY11NFJw+Ka0X1EryeVyKkYrDKLKQIhANVwTh3YrL3u4NGfMrBiOBoLJPnL3SJNuGn5RULa8gBm"
+            ],
+            "method": "signature",
+            "nonce": "Dg4ODg4ODg4ODg4ODg4ODg",
+            "sig": "WEwrfjS-ZEt9SwaEbCs3og1evqT22sRMOYrsT0axQHFxqg7y8p8X1J4-aoRweLadSMlwJjEP1QsH_XLAdmsA7g",
+            "ts": 1792000000
+          },
+          "expect": "approval_untrusted_cert"
+        }
+      ]
+    },
+    {
+      "name": "x509-subject-denied",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": [
+          "dev-*"
+        ]
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ed25519",
+            "certChain": [
+              "MIIBcjCCARmgAwIBAgIRAJQtJ4dO7teqg97Uj5qLA7kwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI2MDkxNDE3NDY0MFoXDTM2MTAxMTE3NDY0MFowEjEQMA4GA1UEAxMHb3BzLWJvYjAqMAUGAytlcAMhACFS+NGbeR0kRTJC4V8uq2y3z/p7al7TAJeWDgaYgdsSo3QwcjAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAcBgNVHREEFTATghFhcHByb3ZlcnMuZXhhbXBsZTAKBggqhkjOPQQDAgNHADBEAiB/Pqhyh/4VkReJgYRfcukR2vAU0pM3fUyjKJaVhKkNnwIgUOHcd1ZflUC2rFlBhxUbpOCYaxVmyJ1z4MiOU71JxD4="
+            ],
+            "method": "signature",
+            "nonce": "Dw8PDw8PDw8PDw8PDw8PDw",
+            "sig": "bvgpxLb46a21sVsGfYKhmblT33VtVJSQ_ztHkjDMLvilHiEDTen62Wabf5gjcqZR9u1l4296PJrDjlaIN8wUAQ",
+            "ts": 1792000000
+          },
+          "expect": "approval_untrusted_cert"
+        }
+      ]
+    },
+    {
+      "name": "x509-DNS-SAN-allowed",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": [
+          "approvers.*"
+        ]
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ed25519",
+            "certChain": [
+              "MIIBcjCCARmgAwIBAgIRAJQtJ4dO7teqg97Uj5qLA7kwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAxMSQXBwcm92YWwgVGVzdCBSb290MB4XDTI2MDkxNDE3NDY0MFoXDTM2MTAxMTE3NDY0MFowEjEQMA4GA1UEAxMHb3BzLWJvYjAqMAUGAytlcAMhACFS+NGbeR0kRTJC4V8uq2y3z/p7al7TAJeWDgaYgdsSo3QwcjAOBgNVHQ8BAf8EBAMCB4AwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAcBgNVHREEFTATghFhcHByb3ZlcnMuZXhhbXBsZTAKBggqhkjOPQQDAgNHADBEAiB/Pqhyh/4VkReJgYRfcukR2vAU0pM3fUyjKJaVhKkNnwIgUOHcd1ZflUC2rFlBhxUbpOCYaxVmyJ1z4MiOU71JxD4="
+            ],
+            "method": "signature",
+            "nonce": "EBAQEBAQEBAQEBAQEBAQEA",
+            "sig": "Vurm8B4ctvoK23L0Ysng4gH8yUw2L7TxTeC7IPEiY2b2laLDe_37bdDWCwKnZwin8wSKVgwiQ3KRNiJV2N4yBA",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "x509-no-digital-signature",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [],
+        "trustedKeys": [],
+        "trustedCAs": [
+          "rootCA"
+        ],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "alg": "ecdsa-p256-sha256",
+            "certChain": [
+              "MIIBiDCCAS6gAwIBAgIQEo/V6fgYtjAw6l7TVNhYgTAKBggqhkjOPQQDAjAdMRswGQYDVQQDExJBcHByb3ZhbCBUZXN0IFJvb3QwHhcNMjYwOTE0MTc0NjQwWhcNMzYxMDExMTc0NjQwWjAXMRUwEwYDVQQDEwxuby1zaWduLXVzZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASOUztvoL97RiW7MGZ8Aftgfvn4uKgP71swBihwMYeyo3PrHb3gMxg2bQafg6b1kABTxzYzywQbIcVeGobB9AC0o1YwVDAOBgNVHQ8BAf8EBAMCBSAwEwYDVR0lBAwwCgYIKwYBBQUHAwMwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRbRxewTqztV8TsoXKMqacdOyJDQDAKBggqhkjOPQQDAgNIADBFAiBp/14v0KOj1gIhw+nHBB7ZRihPzITSnKP78j1pObBhHwIhAI2UAmuu4u94Xf3bR+VKkGi8+rXrKN7L70NOADJszgeQ"
+            ],
+            "method": "signature",
+            "nonce": "EREREREREREREREREREREQ",
+            "sig": "-frf3bSuDHXT-3vyZLCyc41wAexACXLfl6lplM0whlb5nKh7KcN09mdLNmJcQkkSRL0fL7VrzvcMtBaIW7fgkQ",
+            "ts": 1792000000
+          },
+          "expect": "approval_untrusted_cert"
+        }
+      ]
+    },
+    {
+      "name": "tampered-params",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v2"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "EhISEhISEhISEhISEhISEg",
+            "sig": "dENVD4pP3R7KOwGTFTBiMBS_tUyTAZx1mxQSJreNnRY",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "tampered-ref",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/other"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "EhISEhISEhISEhISEhISEg",
+            "sig": "dENVD4pP3R7KOwGTFTBiMBS_tUyTAZx1mxQSJreNnRY",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "tampered-workflow",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "other",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "EhISEhISEhISEhISEhISEg",
+            "sig": "dENVD4pP3R7KOwGTFTBiMBS_tUyTAZx1mxQSJreNnRY",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "tampered-agent",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "EhISEhISEhISEhISEhISEg",
+            "sig": "dENVD4pP3R7KOwGTFTBiMBS_tUyTAZx1mxQSJreNnRY",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "approval-required",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": null,
+          "expect": "approval_required"
+        }
+      ]
+    },
+    {
+      "name": "fractional-job-params",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "value": 1.5
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "EhISEhISEhISEhISEhISEg",
+            "sig": "dENVD4pP3R7KOwGTFTBiMBS_tUyTAZx1mxQSJreNnRY",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    },
+    {
+      "name": "server-owned-params-removed",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "release": "v1",
+          "DEPLITE_JOB_ID": "server",
+          "registry_token": "server-owned"
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "ExMTExMTExMTExMTExMTEw",
+            "sig": "RODCKoHdaV8-mMBqYMtiOcCntFLABqOwQRNeupyuqBY",
+            "ts": 1792000000
+          },
+          "expect": "ok"
+        }
+      ]
+    },
+    {
+      "name": "non-ascii-object-key-hmac",
+      "policy": {
+        "totp": false,
+        "hmacKeys": [
+          "test-hmac"
+        ],
+        "trustedKeys": [],
+        "trustedCAs": [],
+        "allowedSubjects": []
+      },
+      "job": {
+        "agentId": "123e4567-e89b-12d3-a456-426614174000",
+        "workflow": "deploy",
+        "params": {
+          "meta": {
+            "é": "x"
+          }
+        },
+        "ref": "refs/main"
+      },
+      "sequence": [
+        {
+          "now": 1792000000,
+          "approval": {
+            "keyId": "test-hmac",
+            "method": "hmac",
+            "nonce": "FBQUFBQUFBQUFBQUFBQUFA",
+            "sig": "hlSWRfCrx3XX76qRoDK0c42OWhJCoWr2pwSGnZdjVIw",
+            "ts": 1792000000
+          },
+          "expect": "approval_invalid"
+        }
+      ]
+    }
+  ]
+}

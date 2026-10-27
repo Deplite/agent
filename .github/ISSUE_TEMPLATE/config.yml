@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 보안 취약점 신고 / Report a security vulnerability
+    url: https://github.com/Deplite/agent/security/advisories/new
+    about: 보안 문제는 공개 이슈가 아니라 비공개로 신고해주세요 / Report security issues privately, not as a public issue
+  - name: Deplite 문서 / Deplite documentation
+    url: https://docs.deplite.io
+    about: 사용 방법은 문서를 먼저 참고해주세요 / Check the documentation first

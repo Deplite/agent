@@ -1,0 +1,47 @@
+# Binaries
+/bin/
+/dist/
+/deplite-agent
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Profiles
+*.prof
+*.pprof
+*.trace
+
+# Go
+go.work
+go.work.sum
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Editor swap
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Local secrets / config
+.env
+.env.*
+!.env.example

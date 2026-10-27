@@ -1,0 +1,23 @@
+name: 기능 제안 / Feature request
+description: 필요하신 기능이나 막히신 상황을 알려주세요 / Tell us what you need or where you are blocked
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        해결 방법보다 상황을 알려주시는 편이 더 나은 설계로 이어집니다.
+        Describing the situation usually leads to a better design than proposing a solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 상황인가요 / What are you trying to do
+      description: 무엇을 하시려다 막히셨는지 적어주세요 / Describe what you were trying to accomplish
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 지금은 어떻게 하고 계신가요 / Current workaround
+      description: 우회 방법이 있으시면 함께 알려주세요 / Share your workaround, if any
+    validations:
+      required: false

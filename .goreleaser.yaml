@@ -1,0 +1,59 @@
+version: 2
+
+project_name: deplite-agent
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: deplite-agent
+    main: ./cmd/deplite-agent
+    binary: deplite-agent
+    env:
+      - CGO_ENABLED=0
+    flags: [-trimpath]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: deplite-agent
+    formats: [tar.gz]
+    files: [LICENSE, README.md, THIRD_PARTY_NOTICES]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+release:
+  github:
+    owner: Deplite
+    name: agent
+  extra_files: [{glob: ./install.sh}]
+  draft: false
+  replace_existing_artifacts: true
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]

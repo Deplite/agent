@@ -1,0 +1,38 @@
+name: 버그 제보 / Bug report
+description: 동작이 문서나 기대와 다를 때 알려주세요 / Report behavior that differs from the documentation
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        토큰과 설치 코드는 반드시 가려주세요.
+        Please redact tokens and install codes before posting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 무슨 일이 있었나요 / What happened
+      description: 기대하신 동작과 실제로 나타난 동작을 함께 적어주세요 / Describe what you expected and what actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 방법 / Steps to reproduce
+      description: 가능하시면 최소한으로 줄인 형태로 적어주세요 / Reduce it as far as you can
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 실행 환경 / Environment
+      placeholder: "예) macOS 15.5 / Go 1.23.4 / agent 0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 오류 메시지 / Error output
+      description: 스택 트레이스가 있으시면 전문을 붙여주세요 / Paste the full stack trace if you have one
+      render: shell
+    validations:
+      required: false
