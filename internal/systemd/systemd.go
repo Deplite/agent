@@ -270,6 +270,25 @@ func Inspect(ctx context.Context, goos, unitPath string, ops Ops) (*Info, error)
 	if goos != "linux" {
 		return nil, nil
 	}
+	info, err := ReadUnit(unitPath, ops)
+	if err != nil || info == nil {
+		return info, err
+	}
+	if systemctl, err := ops.LookPath("systemctl"); err == nil {
+		output, runErr := ops.Run(ctx, systemctl, "is-active", "deplite-agent")
+		state := strings.TrimSpace(string(output))
+		if state != "" {
+			info.ActiveState = state
+		} else if runErr == nil {
+			info.ActiveState = "active"
+		}
+		info.Active = info.ActiveState == "active"
+	}
+	return info, nil
+}
+
+// ReadUnit reads service settings without invoking systemctl.
+func ReadUnit(unitPath string, ops Ops) (*Info, error) {
 	if unitPath == "" {
 		unitPath = UnitPath
 	}
@@ -282,16 +301,6 @@ func Inspect(ctx context.Context, goos, unitPath string, ops Ops) (*Info, error)
 	}
 	info := &Info{UnitPath: unitPath, ActiveState: "unknown"}
 	parseUnit(body, info)
-	if systemctl, err := ops.LookPath("systemctl"); err == nil {
-		output, runErr := ops.Run(ctx, systemctl, "is-active", "deplite-agent")
-		state := strings.TrimSpace(string(output))
-		if state != "" {
-			info.ActiveState = state
-		} else if runErr == nil {
-			info.ActiveState = "active"
-		}
-		info.Active = info.ActiveState == "active"
-	}
 	return info, nil
 }
 
@@ -306,6 +315,19 @@ func DataDirHint(info *Info, current string) string {
 		return ""
 	}
 	return fmt.Sprintf("서비스는 %s를 사용합니다. `--data-dir %s` 또는 서비스 사용자로 다시 확인해주세요", info.DataDir, info.DataDir)
+}
+
+// WorkflowsDirHint returns guidance when the service and CLI use different workflow dirs.
+func WorkflowsDirHint(info *Info, current string) string {
+	if info == nil || info.WorkflowsDir == "" || current == "" {
+		return ""
+	}
+	serviceDir, err1 := filepath.Abs(info.WorkflowsDir)
+	currentDir, err2 := filepath.Abs(current)
+	if err1 != nil || err2 != nil || filepath.Clean(serviceDir) == filepath.Clean(currentDir) {
+		return ""
+	}
+	return fmt.Sprintf("서비스는 %s를 사용합니다. `--workflows-dir %s` 또는 서비스 사용자로 다시 실행해주세요", info.WorkflowsDir, info.WorkflowsDir)
 }
 
 // UninstallDataDirHint prevents removing a service while leaving its credentials behind.

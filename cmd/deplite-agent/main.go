@@ -51,6 +51,14 @@ func main() {
 		os.Exit(runList(args))
 	case "run":
 		os.Exit(runRun(args))
+	case "add":
+		os.Exit(runAdd(args))
+	case "edit":
+		os.Exit(runEdit(args))
+	case "cp", "copy":
+		os.Exit(runCopy(args))
+	case "delete", "rm":
+		os.Exit(runDelete(args))
 	case "status":
 		os.Exit(runStatus(args))
 	case "doctor":
@@ -82,29 +90,57 @@ func newFlagSet(name, synopsis, summary string) *flag.FlagSet {
 	return fs
 }
 
-// parseOneArg parses flags around a single positional argument. Go's
-// flag package stops at the first bare word, so the tail is parsed again
-// once that word is taken out and `run hello --param k=v` works.
 func parseOneArg(fs *flag.FlagSet, args []string) (string, bool) {
-	if err := fs.Parse(args); err != nil {
+	positional, ok := parseArgs(fs, args, 1)
+	if !ok {
 		return "", false
 	}
-	rest := fs.Args()
-	if len(rest) == 0 {
+	return positional[0], true
+}
+
+// Flag parsing is split from positionals because flag.FlagSet stops at the first positional argument.
+func parseArgs(fs *flag.FlagSet, args []string, count int) ([]string, bool) {
+	var flags, positional []string
+	parseFlags := true
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if parseFlags && arg == "--" {
+			parseFlags = false
+			continue
+		}
+		if !parseFlags || arg == "-" || !strings.HasPrefix(arg, "-") {
+			positional = append(positional, arg)
+			continue
+		}
+		flags = append(flags, arg)
+		if strings.Contains(arg, "=") {
+			continue
+		}
+		name := strings.TrimLeft(arg, "-")
+		f := fs.Lookup(name)
+		if f == nil {
+			continue
+		}
+		if boolFlag, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && boolFlag.IsBoolFlag() {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	if err := fs.Parse(flags); err != nil {
+		return nil, false
+	}
+	if len(positional) < count {
 		fs.Usage()
-		return "", false
+		return nil, false
 	}
-	name := rest[0]
-	if len(rest) > 1 {
-		if err := fs.Parse(rest[1:]); err != nil {
-			return "", false
-		}
-		if fs.NArg() > 0 {
-			fmt.Fprintf(os.Stderr, "오류: 인자가 너무 많습니다: %s\n", strings.Join(fs.Args(), " "))
-			return "", false
-		}
+	if len(positional) > count {
+		fmt.Fprintf(os.Stderr, "오류: 인자가 너무 많습니다: %s\n", strings.Join(positional[count:], " "))
+		return nil, false
 	}
-	return name, true
+	return positional, true
 }
 
 // stringList collects a flag that may be repeated, such as --param.
@@ -240,8 +276,12 @@ func usage(w *os.File) {
 
 워크플로우
   validate    워크플로우 파일을 검사합니다
-  list        Agent가 인식한 워크플로우를 보여줍니다
+  list        Agent가 인식한 워크플로우와 파일 위치를 보여줍니다
   run         워크플로우를 이 머신에서 바로 실행합니다
+  add         새 워크플로우를 만듭니다
+  edit        워크플로우를 편집합니다
+  cp          워크플로우를 복사합니다
+  delete      워크플로우를 삭제합니다
 
 진단
   status      등록 정보와 실행 상태를 보여줍니다
@@ -261,5 +301,6 @@ func usage(w *os.File) {
   DEPLITE_DATA_DIR       데이터 디렉토리
   DEPLITE_WORKFLOWS_DIR  워크플로우 디렉토리
   DEPLITE_SECRET_<KEY>   워크플로우 secrets 에 선언된 키의 값
+  VISUAL, EDITOR         워크플로우 편집기
 `, defaultBaseURL)
 }

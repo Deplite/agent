@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -16,20 +20,28 @@ import (
 )
 
 func runValidate(args []string) int {
+	return runValidateWithDeps(args, defaultWorkflowCmdDeps())
+}
+
+func runValidateWithDeps(args []string, deps workflowCmdDeps) int {
+	deps = completeWorkflowCmdDeps(deps)
 	fs := newFlagSet("validate",
 		"deplite-agent validate [--workflows-dir DIR] [FILE...]",
 		"워크플로우 파일을 검사합니다. Agent를 실행하지 않고도 문법과 스키마를 확인할 수 있습니다.")
+	fs.SetOutput(deps.Err)
 	workflowsDir := fs.String("workflows-dir", "", "워크플로우 디렉토리 (기본값: <data-dir>/workflows)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
 	type outcome struct {
-		path string
-		name string
-		err  error
+		path      string
+		name      string
+		err       error
+		duplicate bool
 	}
 	var results []outcome
+	directoryMode := false
 
 	if files := fs.Args(); len(files) > 0 {
 		for _, f := range files {
@@ -37,36 +49,62 @@ func runValidate(args []string) int {
 			results = append(results, outcome{path: f, name: wf.Name, err: err})
 		}
 	} else {
-		_, dir, err := dirs("", *workflowsDir)
+		directoryMode = true
+		dir, _, err := workflowDirectory(*workflowsDir, false)
 		if err != nil {
-			return errorf("%v", err)
+			return workflowError(deps.Err, "%v", err)
 		}
 		if _, err := os.Stat(dir); err != nil {
-			return errorf("워크플로우 디렉토리를 열 수 없습니다: %s", dir)
+			return workflowError(deps.Err, "워크플로우 디렉토리를 열 수 없습니다: %s", dir)
 		}
 		wfs, bad := workflow.Scan(dir)
 		for _, w := range wfs {
-			results = append(results, outcome{path: dir, name: w.Name})
+			rel, _ := filepath.Rel(dir, w.Path)
+			results = append(results, outcome{path: rel, name: w.Name})
 		}
 		for _, e := range bad {
-			results = append(results, outcome{path: e.Path, err: e.Err})
+			rel, _ := filepath.Rel(dir, e.Path)
+			results = append(results, outcome{path: rel, err: e.Err})
+		}
+		duplicates := workflow.DuplicateNames(wfs)
+		duplicateNames := make([]string, 0, len(duplicates))
+		for name := range duplicates {
+			duplicateNames = append(duplicateNames, name)
+		}
+		sort.Strings(duplicateNames)
+		for _, name := range duplicateNames {
+			paths := make([]string, 0, len(duplicates[name]))
+			for _, path := range duplicates[name] {
+				rel, _ := filepath.Rel(dir, path)
+				paths = append(paths, rel)
+			}
+			results = append(results, outcome{path: strings.Join(paths, ", "), name: name, duplicate: true})
 		}
 		if len(results) == 0 {
-			fmt.Printf("%s 에 워크플로우 파일이 없습니다.\n", dir)
+			fmt.Fprintf(deps.Out, "%s 에 워크플로우 파일이 없습니다.\n", dir)
 			return 0
 		}
 	}
 
 	failed := 0
 	for _, r := range results {
-		if r.err != nil {
+		if r.duplicate {
 			failed++
-			fmt.Printf("FAIL  %s\n      %v\n", r.path, r.err)
+			fmt.Fprintf(deps.Out, "FAIL  중복 이름 %q: %s\n", r.name, r.path)
 			continue
 		}
-		fmt.Printf("OK    %s\n", r.name)
+		if r.err != nil {
+			failed++
+			fmt.Fprintf(deps.Out, "FAIL  %s\n      %v\n", r.path, r.err)
+			continue
+		}
+		if directoryMode {
+			fmt.Fprintf(deps.Out, "OK    %s  (%s)\n", r.name, r.path)
+		} else {
+			fmt.Fprintf(deps.Out, "OK    %s\n", r.name)
+		}
 	}
-	fmt.Printf("\n정상 %d개, 오류 %d개\n", len(results)-failed, failed)
+	fmt.Fprintf(deps.Out, "\n정상 %d개, 오류 %d개\n", len(results)-failed, failed)
 	if failed > 0 {
 		return 1
 	}
@@ -74,50 +112,119 @@ func runValidate(args []string) int {
 }
 
 func runList(args []string) int {
+	return runListWithDeps(args, defaultWorkflowCmdDeps())
+}
+
+func runListWithDeps(args []string, deps workflowCmdDeps) int {
+	deps = completeWorkflowCmdDeps(deps)
 	fs := newFlagSet("list",
 		"deplite-agent list [--workflows-dir DIR] [--json]",
-		"Agent가 인식한 워크플로우를 보여줍니다. 대시보드에 보고되는 것과 같은 목록입니다.")
+		"Agent가 인식한 워크플로우와 파일 위치를 보여줍니다. 대시보드에 보고되는 것과 같은 목록입니다.")
+	fs.SetOutput(deps.Err)
 	workflowsDir := fs.String("workflows-dir", "", "워크플로우 디렉토리 (기본값: <data-dir>/workflows)")
 	asJSON := fs.Bool("json", false, "JSON으로 출력합니다")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	_, dir, err := dirs("", *workflowsDir)
+	workflowsFlagSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "workflows-dir" {
+			workflowsFlagSet = true
+		}
+	})
+	dir, overridden, err := workflowDirectory(*workflowsDir, workflowsFlagSet)
 	if err != nil {
-		return errorf("%v", err)
+		return workflowError(deps.Err, "%v", err)
+	}
+	if hint := workflowServiceHint(dir, overridden, deps); hint != "" {
+		fmt.Fprintln(deps.Err, "참고: "+hint)
 	}
 	wfs, bad := workflow.Scan(dir)
 
 	if *asJSON {
-		enc := json.NewEncoder(os.Stdout)
+		items := make([]struct {
+			workflow.Workflow
+			Path string `json:"path"`
+		}, 0, len(wfs))
+		for _, wf := range wfs {
+			items = append(items, struct {
+				workflow.Workflow
+				Path string `json:"path"`
+			}{Workflow: wf, Path: wf.Path})
+		}
+		enc := json.NewEncoder(deps.Out)
 		enc.SetIndent("", "  ")
-		if err := enc.Encode(wfs); err != nil {
-			return errorf("%v", err)
+		if err := enc.Encode(items); err != nil {
+			return workflowError(deps.Err, "%v", err)
+		}
+		if len(workflow.DuplicateNames(wfs)) > 0 {
+			printDuplicateWarnings(deps.Err, dir, wfs)
 		}
 		return 0
 	}
 
+	fmt.Fprintf(deps.Out, "워크플로우 디렉토리: %s\n\n", dir)
 	if len(wfs) == 0 && len(bad) == 0 {
-		fmt.Printf("%s 에 워크플로우가 없습니다.\n", dir)
+		fmt.Fprintln(deps.Out, "워크플로우가 없습니다.")
+		fmt.Fprintln(deps.Out, "deplite-agent add <이름> 으로 만들 수 있습니다.")
 		return 0
 	}
 
 	var t textutil.Table
-	t.Add("이름", "버전", "스텝", "파라미터", "시크릿", "외부 호출", "승인 방식")
+	t.Add("이름", "버전", "스텝", "파라미터", "시크릿", "외부 호출", "승인 방식", "파일")
 	for _, wf := range wfs {
 		t.Add(wf.Name, dash(wf.Version), fmt.Sprint(len(wf.Steps)),
-			dash(paramNames(wf)), dash(strings.Join(wf.SecretNames(), ",")), callableNote(wf), dash(strings.Join(wf.ApprovalMethods(), ",")))
+			dash(paramNames(wf)), dash(strings.Join(wf.SecretNames(), ",")), callableNote(wf), dash(strings.Join(wf.ApprovalMethods(), ",")), relativeWorkflowPath(dir, wf.Path))
 	}
-	t.Render(os.Stdout)
+	t.Render(deps.Out)
 
 	if len(bad) > 0 {
-		fmt.Fprintf(os.Stderr, "\n읽지 못한 파일 %d개 (deplite-agent validate 로 확인해주세요)\n", len(bad))
-		for _, e := range bad {
-			fmt.Fprintf(os.Stderr, "  %s\n", e.Path)
-		}
+		printUnreadFiles(deps.Err, dir, bad)
+	}
+	duplicates := workflow.DuplicateNames(wfs)
+	if len(duplicates) > 0 {
+		printDuplicateWarnings(deps.Err, dir, wfs)
+	}
+	if len(bad) > 0 || len(duplicates) > 0 {
 		return 1
 	}
 	return 0
+}
+
+func printUnreadFiles(out io.Writer, dir string, bad []workflow.ScanError) {
+	fmt.Fprintf(out, "\n읽지 못한 파일 %d개 (deplite-agent validate 로 확인해주세요)\n", len(bad))
+	for _, entry := range bad {
+		fmt.Fprintf(out, "  %s\n", relativeWorkflowPath(dir, entry.Path))
+	}
+	fmt.Fprintln(out, "고치려면 deplite-agent edit <파일> 을 사용해주세요.")
+}
+
+func printDuplicateWarnings(out io.Writer, dir string, wfs []workflow.Workflow) {
+	duplicates := workflow.DuplicateNames(wfs)
+	if len(duplicates) == 0 {
+		return
+	}
+	names := make([]string, 0, len(duplicates))
+	for name := range duplicates {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	fmt.Fprintln(out, "경고: 워크플로우 이름이 중복되었습니다.")
+	for _, name := range names {
+		paths := duplicates[name]
+		for i := range paths {
+			paths[i] = relativeWorkflowPath(dir, paths[i])
+		}
+		fmt.Fprintf(out, "  %s: %s\n", name, strings.Join(paths, ", "))
+	}
+}
+
+func relativeWorkflowPath(dir, path string) string {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return path
+	}
+	return rel
 }
 
 func runRun(args []string) int {

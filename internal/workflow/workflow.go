@@ -136,6 +136,8 @@ type Step struct {
 }
 
 type Workflow struct {
+	// Path is local source metadata and is excluded from workflow payloads.
+	Path           string            `yaml:"-" json:"-"`
 	Name           string            `yaml:"name" json:"name"`
 	Description    string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Version        string            `yaml:"version,omitempty" json:"version,omitempty"`
@@ -520,6 +522,147 @@ func (w Workflow) Validate() error {
 	return nil
 }
 
+// ValidName reports whether name is a valid workflow identifier.
+func ValidName(name string) bool { return nameRE.MatchString(name) }
+
+// NameScalar formats name as a YAML scalar that remains a string.
+func NameScalar(name string) string {
+	if !ValidName(name) || isLegacyYAMLBoolean(name) || name == "-" || name == "..." || name == "---" {
+		return strconv.Quote(name)
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("name: "+name+"\n"), &doc); err != nil || len(doc.Content) == 0 {
+		return strconv.Quote(name)
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode || len(root.Content) < 2 {
+		return strconv.Quote(name)
+	}
+	value := root.Content[1]
+	if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || value.Value != name {
+		return strconv.Quote(name)
+	}
+	return name
+}
+
+func isLegacyYAMLBoolean(name string) bool {
+	switch strings.ToLower(name) {
+	case "y", "n", "yes", "no", "on", "off":
+		return true
+	default:
+		return false
+	}
+}
+
+// SetName changes only the top-level name token in a YAML document.
+func SetName(body []byte, name string) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(body, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, errors.New("workflow name must be in a top-level mapping")
+	}
+	root := doc.Content[0]
+	var value *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "name" {
+			if value != nil {
+				return nil, errors.New("top-level name field is duplicated")
+			}
+			value = root.Content[i+1]
+		}
+	}
+	if value == nil {
+		return nil, errors.New("top-level name field is missing")
+	}
+	style := value.Style & (yaml.DoubleQuotedStyle | yaml.SingleQuotedStyle | yaml.LiteralStyle | yaml.FoldedStyle)
+	if value.Kind != yaml.ScalarNode || (style != 0 && style != yaml.DoubleQuotedStyle && style != yaml.SingleQuotedStyle) || strings.ContainsAny(value.Value, "\r\n") {
+		return nil, errors.New("top-level name must be a single-line string")
+	}
+	line := value.Line - 1
+	lines := strings.Split(string(body), "\n")
+	if line < 0 || line >= len(lines) {
+		return nil, errors.New("top-level name token is outside the YAML document")
+	}
+	lineText := strings.TrimSuffix(lines[line], "\r")
+	runes := []rune(lineText)
+	start := value.Column - 1
+	if line == 0 && strings.HasPrefix(lines[0], "\uFEFF") {
+		start++
+	}
+	if start < 0 || start > len(runes) {
+		return nil, errors.New("top-level name token is outside its line")
+	}
+	quote := rune(0)
+	if value.Style&yaml.DoubleQuotedStyle != 0 {
+		quote = '"'
+	} else if value.Style&yaml.SingleQuotedStyle != 0 {
+		quote = '\''
+	}
+	expected := value.Value
+	if quote != 0 {
+		expected = string(quote) + value.Value + string(quote)
+	}
+	end := start + len([]rune(expected))
+	if end > len(runes) || string(runes[start:end]) != expected {
+		return nil, errors.New("top-level name token does not match its YAML value")
+	}
+	if quote == 0 && end < len(runes) {
+		next := runes[end]
+		if next != ' ' && next != '\t' && next != ',' && next != '}' && next != '#' {
+			return nil, errors.New("top-level name token does not match its YAML value")
+		}
+	}
+	replacement := NameScalar(name)
+	if quote != 0 {
+		replacement = string(quote) + name + string(quote)
+	}
+	byteStart := len(string(runes[:start]))
+	byteEnd := len(string(runes[:end]))
+	lineStart := 0
+	for i := 0; i < line; i++ {
+		lineStart += len(lines[i]) + 1
+	}
+	result := make([]byte, 0, len(body)+len(replacement)-len(expected))
+	result = append(result, body[:lineStart+byteStart]...)
+	result = append(result, replacement...)
+	result = append(result, body[lineStart+byteEnd:]...)
+	var verify yaml.Node
+	if err := yaml.Unmarshal(result, &verify); err != nil {
+		return nil, err
+	}
+	if len(verify.Content) == 0 || verify.Content[0].Kind != yaml.MappingNode {
+		return nil, errors.New("updated YAML has no top-level mapping")
+	}
+	for i := 0; i+1 < len(verify.Content[0].Content); i += 2 {
+		if verify.Content[0].Content[i].Value == "name" {
+			updated := verify.Content[0].Content[i+1]
+			if updated.Kind != yaml.ScalarNode || updated.Tag != "!!str" || updated.Value != name {
+				return nil, errors.New("updated workflow name is not a string")
+			}
+			return result, nil
+		}
+	}
+	return nil, errors.New("updated top-level name field is missing")
+}
+
+// DuplicateNames returns workflow names shared by multiple files.
+func DuplicateNames(wfs []Workflow) map[string][]string {
+	paths := make(map[string][]string)
+	for _, wf := range wfs {
+		paths[wf.Name] = append(paths[wf.Name], wf.Path)
+	}
+	out := make(map[string][]string)
+	for name, names := range paths {
+		if len(names) > 1 {
+			sort.Strings(names)
+			out[name] = names
+		}
+	}
+	return out
+}
+
 var refillRE = regexp.MustCompile(`^(\d+)\s*/\s*(.+)$`)
 
 func (w *Workflow) validateLimits() error {
@@ -755,6 +898,16 @@ func LoadFile(path string) (Workflow, error) {
 	if err != nil {
 		return Workflow{}, err
 	}
+	w, err := Parse(body)
+	if err != nil {
+		return Workflow{}, err
+	}
+	w.Path = path
+	return w, nil
+}
+
+// Parse validates a workflow document and loads its local approval policy.
+func Parse(body []byte) (Workflow, error) {
 	var w Workflow
 	if err := yaml.Unmarshal(body, &w); err != nil {
 		return Workflow{}, err

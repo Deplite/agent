@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -133,6 +134,29 @@ func TestValidatePath(t *testing.T) {
 	}
 	if err := ValidatePath("/var/lib/deplite-agent"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReadUnitAndWorkflowsDirHint(t *testing.T) {
+	ops := newFakeOps()
+	path := "/etc/systemd/system/deplite-agent.service"
+	ops.files[path] = []byte("[Service]\nEnvironment=DEPLITE_WORKFLOWS_DIR=/service/workflows\n")
+	info, err := ReadUnit(path, ops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info == nil || info.WorkflowsDir != "/service/workflows" {
+		t.Fatalf("ReadUnit info = %#v", info)
+	}
+	if len(ops.runs) != 0 {
+		t.Fatalf("ReadUnit invoked commands: %v", ops.runs)
+	}
+	hint := WorkflowsDirHint(info, "/cli/workflows")
+	if !strings.Contains(hint, "서비스는 /service/workflows를 사용합니다") || strings.HasPrefix(hint, "참고: ") || !strings.Contains(hint, "--workflows-dir /service/workflows") {
+		t.Fatalf("WorkflowsDirHint = %q", hint)
+	}
+	if hint := WorkflowsDirHint(info, filepath.Clean("/service/../service/workflows")); hint != "" {
+		t.Fatalf("WorkflowsDirHint for equivalent dirs = %q", hint)
 	}
 }
 
