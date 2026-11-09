@@ -2,9 +2,12 @@ package workflow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -62,6 +65,57 @@ steps:
 	}
 	if !wfs[0].Secrets[0].Required {
 		t.Fatal("legacy secret should default to required=true")
+	}
+}
+
+func TestScanRejectsEveryDuplicateName(t *testing.T) {
+	for _, files := range [][]string{
+		{"hello.yml", "team/hello.yml"},
+		{"hello.yml", "team/hello.yml", "z/hello.yaml"},
+	} {
+		t.Run(fmt.Sprintf("%d files", len(files)), func(t *testing.T) {
+			dir := t.TempDir()
+			for _, name := range files {
+				path := filepath.Join(dir, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("name: hello\nsteps:\n  - name: run\n    run: echo hi\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeFile(t, dir, "unique.yml", "name: unique\nsteps:\n  - name: run\n    run: echo hi\n")
+
+			wfs, bad := Scan(dir)
+			if len(wfs) != 1 || wfs[0].Name != "unique" {
+				t.Fatalf("workflows = %+v, want only unique", wfs)
+			}
+			if len(bad) != len(files) {
+				t.Fatalf("bad files = %d, want %d: %+v", len(bad), len(files), bad)
+			}
+			wantFiles := append([]string(nil), files...)
+			sort.Strings(wantFiles)
+			for i, entry := range bad {
+				rel, err := filepath.Rel(dir, entry.Path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if i > 0 && bad[i-1].Path > entry.Path {
+					t.Fatalf("bad paths are not sorted: %+v", bad)
+				}
+				var duplicate *DuplicateNameError
+				if !errors.As(entry.Err, &duplicate) {
+					t.Fatalf("bad error for %s is %T, want DuplicateNameError", rel, entry.Err)
+				}
+				if duplicate.Name != "hello" || !reflect.DeepEqual(duplicate.Files, wantFiles) {
+					t.Fatalf("duplicate error = %+v, want name hello files %v", duplicate, wantFiles)
+				}
+				wantError := fmt.Sprintf("workflow %q: name is defined in %d files (%s)", "hello", len(files), strings.Join(wantFiles, ", "))
+				if entry.Err.Error() != wantError {
+					t.Fatalf("error = %q, want %q", entry.Err.Error(), wantError)
+				}
+			}
+		})
 	}
 }
 

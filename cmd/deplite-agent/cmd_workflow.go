@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -35,10 +36,9 @@ func runValidateWithDeps(args []string, deps workflowCmdDeps) int {
 	}
 
 	type outcome struct {
-		path      string
-		name      string
-		err       error
-		duplicate bool
+		path string
+		name string
+		err  error
 	}
 	var results []outcome
 	directoryMode := false
@@ -66,20 +66,6 @@ func runValidateWithDeps(args []string, deps workflowCmdDeps) int {
 			rel, _ := filepath.Rel(dir, e.Path)
 			results = append(results, outcome{path: rel, err: e.Err})
 		}
-		duplicates := workflow.DuplicateNames(wfs)
-		duplicateNames := make([]string, 0, len(duplicates))
-		for name := range duplicates {
-			duplicateNames = append(duplicateNames, name)
-		}
-		sort.Strings(duplicateNames)
-		for _, name := range duplicateNames {
-			paths := make([]string, 0, len(duplicates[name]))
-			for _, path := range duplicates[name] {
-				rel, _ := filepath.Rel(dir, path)
-				paths = append(paths, rel)
-			}
-			results = append(results, outcome{path: strings.Join(paths, ", "), name: name, duplicate: true})
-		}
 		if len(results) == 0 {
 			fmt.Fprintf(deps.Out, "%s 에 워크플로우 파일이 없습니다.\n", dir)
 			return 0
@@ -88,11 +74,6 @@ func runValidateWithDeps(args []string, deps workflowCmdDeps) int {
 
 	failed := 0
 	for _, r := range results {
-		if r.duplicate {
-			failed++
-			fmt.Fprintf(deps.Out, "FAIL  중복 이름 %q: %s\n", r.name, r.path)
-			continue
-		}
 		if r.err != nil {
 			failed++
 			fmt.Fprintf(deps.Out, "FAIL  %s\n      %v\n", r.path, r.err)
@@ -140,6 +121,7 @@ func runListWithDeps(args []string, deps workflowCmdDeps) int {
 		fmt.Fprintln(deps.Err, "참고: "+hint)
 	}
 	wfs, bad := workflow.Scan(dir)
+	duplicates := duplicateNameGroups(bad)
 
 	if *asJSON {
 		items := make([]struct {
@@ -157,8 +139,8 @@ func runListWithDeps(args []string, deps workflowCmdDeps) int {
 		if err := enc.Encode(items); err != nil {
 			return workflowError(deps.Err, "%v", err)
 		}
-		if len(workflow.DuplicateNames(wfs)) > 0 {
-			printDuplicateWarnings(deps.Err, dir, wfs)
+		if len(duplicates) > 0 {
+			printDuplicateWorkflows(deps.Err, duplicates, true)
 		}
 		return 0
 	}
@@ -178,14 +160,14 @@ func runListWithDeps(args []string, deps workflowCmdDeps) int {
 	}
 	t.Render(deps.Out)
 
-	if len(bad) > 0 {
-		printUnreadFiles(deps.Err, dir, bad)
-	}
-	duplicates := workflow.DuplicateNames(wfs)
 	if len(duplicates) > 0 {
-		printDuplicateWarnings(deps.Err, dir, wfs)
+		printDuplicateWorkflows(deps.Err, duplicates, false)
 	}
-	if len(bad) > 0 || len(duplicates) > 0 {
+	unread := unreadWorkflowErrors(bad)
+	if len(unread) > 0 {
+		printUnreadFiles(deps.Err, dir, unread)
+	}
+	if len(bad) > 0 {
 		return 1
 	}
 	return 0
@@ -199,23 +181,52 @@ func printUnreadFiles(out io.Writer, dir string, bad []workflow.ScanError) {
 	fmt.Fprintln(out, "고치려면 deplite-agent edit <파일> 을 사용해주세요.")
 }
 
-func printDuplicateWarnings(out io.Writer, dir string, wfs []workflow.Workflow) {
-	duplicates := workflow.DuplicateNames(wfs)
-	if len(duplicates) == 0 {
-		return
+type duplicateNameGroup struct {
+	name  string
+	files []string
+}
+
+func duplicateNameGroups(bad []workflow.ScanError) []duplicateNameGroup {
+	byName := make(map[string][]string)
+	for _, entry := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if errors.As(entry.Err, &duplicate) {
+			byName[duplicate.Name] = duplicate.Files
+		}
 	}
-	names := make([]string, 0, len(duplicates))
-	for name := range duplicates {
+	names := make([]string, 0, len(byName))
+	for name := range byName {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	fmt.Fprintln(out, "경고: 워크플로우 이름이 중복되었습니다.")
+	groups := make([]duplicateNameGroup, 0, len(names))
 	for _, name := range names {
-		paths := duplicates[name]
-		for i := range paths {
-			paths[i] = relativeWorkflowPath(dir, paths[i])
+		groups = append(groups, duplicateNameGroup{name: name, files: byName[name]})
+	}
+	return groups
+}
+
+func unreadWorkflowErrors(bad []workflow.ScanError) []workflow.ScanError {
+	var unread []workflow.ScanError
+	for _, entry := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if !errors.As(entry.Err, &duplicate) {
+			unread = append(unread, entry)
 		}
-		fmt.Fprintf(out, "  %s: %s\n", name, strings.Join(paths, ", "))
+	}
+	return unread
+}
+
+func printDuplicateWorkflows(out io.Writer, groups []duplicateNameGroup, warning bool) {
+	count := len(groups)
+	if warning {
+		fmt.Fprintf(out, "경고: 이름이 겹쳐 무효가 된 워크플로우 %d개 (파일을 하나만 남겨주세요)\n", count)
+	} else {
+		fmt.Fprintln(out)
+		fmt.Fprintf(out, "이름이 겹쳐 무효가 된 워크플로우 %d개 (파일을 하나만 남겨주세요)\n", count)
+	}
+	for _, group := range groups {
+		fmt.Fprintf(out, "  %s: %s\n", group.name, strings.Join(group.files, ", "))
 	}
 }
 

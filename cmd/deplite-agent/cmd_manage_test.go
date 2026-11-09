@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Deplite/agent/internal/systemd"
+	"github.com/Deplite/agent/internal/workflow"
 )
 
 func testWorkflowDeps(t *testing.T, out, stderr *bytes.Buffer) workflowCmdDeps {
@@ -450,6 +451,107 @@ func TestCopyWorkflow(t *testing.T) {
 	}
 }
 
+func TestDuplicateWorkflowTargetCommands(t *testing.T) {
+	newDuplicateDir := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeManageWorkflow(t, filepath.Join(dir, "a.yml"), "dup")
+		writeManageWorkflow(t, filepath.Join(dir, "team", "b.yml"), "dup")
+		return dir
+	}
+
+	t.Run("add and copy reject duplicate destination names", func(t *testing.T) {
+		dir := newDuplicateDir(t)
+		writeManageWorkflow(t, filepath.Join(dir, "source.yml"), "source")
+		writeManageWorkflow(t, filepath.Join(dir, "one.yml"), "one")
+		var out, stderr bytes.Buffer
+		deps := testWorkflowDeps(t, &out, &stderr)
+		calls := 0
+		deps.RunEditor = func(string, ...string) error { calls++; return nil }
+		wantDuplicate := "이름이 같은 워크플로우가 이미 여러 개 있습니다: dup (a.yml, team/b.yml). 중복을 먼저 정리해주세요"
+		if code := runAddWithDeps([]string{"dup", "--workflows-dir", dir}, deps); code != 1 || calls != 0 || !strings.Contains(stderr.String(), wantDuplicate) || strings.Contains(stderr.String(), "deplite-agent edit dup") {
+			t.Fatalf("add duplicate name: code=%d calls=%d stderr=%s", code, calls, stderr.String())
+		}
+		stderr.Reset()
+		if code := runCopyWithDeps([]string{"source", "dup", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), wantDuplicate) || strings.Contains(stderr.String(), "deplite-agent edit dup") {
+			t.Fatalf("copy duplicate destination: code=%d stderr=%s", code, stderr.String())
+		}
+		stderr.Reset()
+		if code := runAddWithDeps([]string{"one", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "이미 있는 워크플로우입니다: one (one.yml). 고치려면 deplite-agent edit one 을 사용해주세요") {
+			t.Fatalf("add single existing name: code=%d stderr=%s", code, stderr.String())
+		}
+		stderr.Reset()
+		if code := runCopyWithDeps([]string{"source", "one", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "이미 있는 워크플로우입니다: one (one.yml). 고치려면 deplite-agent edit one 을 사용해주세요") {
+			t.Fatalf("copy single existing name: code=%d stderr=%s", code, stderr.String())
+		}
+	})
+
+	t.Run("name lookup and copy source reject duplicates", func(t *testing.T) {
+		dir := newDuplicateDir(t)
+		var out, stderr bytes.Buffer
+		deps := testWorkflowDeps(t, &out, &stderr)
+		calls := 0
+		deps.RunEditor = func(string, ...string) error { calls++; return nil }
+		if code := runEditWithDeps([]string{"dup", "--workflows-dir", dir}, deps); code != 1 || calls != 0 || !strings.Contains(stderr.String(), "이름이 같은 워크플로우가 여러 개입니다: dup (a.yml, team/b.yml). 파일 경로로 지정해주세요") {
+			t.Fatalf("edit by duplicate name: code=%d calls=%d stderr=%s", code, calls, stderr.String())
+		}
+		stderr.Reset()
+		if code := runDeleteWithDeps([]string{"dup", "--yes", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "파일 경로로 지정해주세요") {
+			t.Fatalf("delete by duplicate name: code=%d stderr=%s", code, stderr.String())
+		}
+		stderr.Reset()
+		if code := runCopyWithDeps([]string{"dup", "new", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "중복을 먼저 정리해주세요") {
+			t.Fatalf("copy duplicate source: code=%d stderr=%s", code, stderr.String())
+		}
+	})
+
+	t.Run("editing a duplicate path can resolve or reject the duplicate", func(t *testing.T) {
+		dir := newDuplicateDir(t)
+		var out, stderr bytes.Buffer
+		deps := testWorkflowDeps(t, &out, &stderr)
+		deps.RunEditor, _ = fakeEditor(t, func(_ int, _ string, body []byte) []byte {
+			return bytes.Replace(body, []byte("name: dup"), []byte("name: renamed"), 1)
+		})
+		if code := runEditWithDeps([]string{"a.yml", "--workflows-dir", dir}, deps); code != 0 {
+			t.Fatalf("rename duplicate path: code=%d stderr=%s", code, stderr.String())
+		}
+		wf, err := workflow.LoadFile(filepath.Join(dir, "a.yml"))
+		if err != nil || wf.Name != "renamed" {
+			t.Fatalf("renamed workflow = %+v, err=%v", wf, err)
+		}
+
+		dir = newDuplicateDir(t)
+		out.Reset()
+		stderr.Reset()
+		deps = testWorkflowDeps(t, &out, &stderr)
+		var buffer string
+		deps.RunEditor, _ = fakeEditor(t, func(_ int, path string, body []byte) []byte {
+			buffer = path
+			return bytes.Replace(body, []byte(`description: ""`), []byte(`description: "edited"`), 1)
+		})
+		deps.Ask = func(string, bool) bool { return false }
+		if code := runEditWithDeps([]string{"a.yml", "--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "같은 이름의 워크플로우가 이미 있습니다: team/b.yml") {
+			t.Fatalf("edit duplicate without rename: code=%d stderr=%s", code, stderr.String())
+		}
+		_ = os.Remove(buffer)
+	})
+
+	t.Run("delete by duplicate path removes only that file", func(t *testing.T) {
+		dir := newDuplicateDir(t)
+		var out, stderr bytes.Buffer
+		deps := testWorkflowDeps(t, &out, &stderr)
+		if code := runDeleteWithDeps([]string{"team/b.yml", "--yes", "--workflows-dir", dir}, deps); code != 0 {
+			t.Fatalf("delete duplicate path: code=%d stderr=%s", code, stderr.String())
+		}
+		if _, err := os.Stat(filepath.Join(dir, "team", "b.yml")); !os.IsNotExist(err) {
+			t.Fatalf("duplicate path still exists: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "a.yml")); err != nil {
+			t.Fatalf("remaining duplicate file missing: %v", err)
+		}
+	})
+}
+
 func TestDeleteWorkflow(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.yml")
@@ -540,15 +642,17 @@ func TestListAndValidateWorkflowPathsAndDuplicates(t *testing.T) {
 	}
 	out.Reset()
 	writeManageWorkflow(t, filepath.Join(dir, "other", "same.yml"), "deploy")
-	if code := runListWithDeps([]string{"--json", "--workflows-dir", dir}, deps); code != 0 || !strings.Contains(stderr.String(), "중복") || !strings.Contains(stderr.String(), "team/deploy.yml") {
+	if code := runListWithDeps([]string{"--json", "--workflows-dir", dir}, deps); code != 0 || !strings.Contains(stderr.String(), "무효가 된 워크플로우") || !strings.Contains(stderr.String(), "team/deploy.yml") || strings.TrimSpace(out.String()) != "[]" {
 		t.Fatalf("duplicate JSON list: code=%d stderr=%s", code, stderr.String())
 	}
-	if code := runListWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "중복") || !strings.Contains(stderr.String(), "team/deploy.yml") {
+	out.Reset()
+	stderr.Reset()
+	if code := runListWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || !strings.Contains(out.String(), "워크플로우 디렉토리:") || strings.Contains(out.String(), "deploy  ") || !strings.HasPrefix(stderr.String(), "\n") || !strings.Contains(stderr.String(), "무효가 된 워크플로우 1개") || !strings.Contains(stderr.String(), "deploy: other/same.yml, team/deploy.yml") {
 		t.Fatalf("duplicate list: code=%d stderr=%s", code, stderr.String())
 	}
 	out.Reset()
 	stderr.Reset()
-	if code := runValidateWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || !strings.Contains(out.String(), "OK    deploy  (other/same.yml)") || !strings.Contains(out.String(), "FAIL  중복 이름") {
+	if code := runValidateWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || strings.Contains(out.String(), "OK    deploy") || !strings.Contains(out.String(), "FAIL  other/same.yml") || !strings.Contains(out.String(), "FAIL  team/deploy.yml") {
 		t.Fatalf("duplicate validate: code=%d out=%s stderr=%s", code, out.String(), stderr.String())
 	}
 	bad := filepath.Join(dir, "team", "bad.yml")
@@ -556,7 +660,7 @@ func TestListAndValidateWorkflowPathsAndDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 	stderr.Reset()
-	if code := runListWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "team/bad.yml") || !strings.Contains(stderr.String(), "deplite-agent edit <파일>") {
+	if code := runListWithDeps([]string{"--workflows-dir", dir}, deps); code != 1 || !strings.Contains(stderr.String(), "team/bad.yml") || !strings.Contains(stderr.String(), "읽지 못한 파일 1개") || !strings.Contains(stderr.String(), "deplite-agent edit <파일>") {
 		t.Fatalf("bad file list: code=%d stderr=%s", code, stderr.String())
 	}
 

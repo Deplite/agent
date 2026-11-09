@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -23,6 +24,12 @@ const maskedValue = "****"
 // the names that are available so a typo is obvious.
 func LoadWorkflow(dir, name string) (workflow.Workflow, error) {
 	wfs, bad := workflow.Scan(dir)
+	for _, entry := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if errors.As(entry.Err, &duplicate) && duplicate.Name == name {
+			return workflow.Workflow{}, fmt.Errorf("워크플로우 %q 는 같은 이름의 파일이 여러 개라 무효입니다: %s", name, strings.Join(duplicate.Files, ", "))
+		}
+	}
 	for i := range wfs {
 		if wfs[i].Name == name {
 			return wfs[i], nil

@@ -647,22 +647,6 @@ func SetName(body []byte, name string) ([]byte, error) {
 	return nil, errors.New("updated top-level name field is missing")
 }
 
-// DuplicateNames returns workflow names shared by multiple files.
-func DuplicateNames(wfs []Workflow) map[string][]string {
-	paths := make(map[string][]string)
-	for _, wf := range wfs {
-		paths[wf.Name] = append(paths[wf.Name], wf.Path)
-	}
-	out := make(map[string][]string)
-	for name, names := range paths {
-		if len(names) > 1 {
-			sort.Strings(names)
-			out[name] = names
-		}
-	}
-	return out
-}
-
 var refillRE = regexp.MustCompile(`^(\d+)\s*/\s*(.+)$`)
 
 func (w *Workflow) validateLimits() error {
@@ -895,7 +879,44 @@ func Scan(dir string) ([]Workflow, []ScanError) {
 		return nil
 	})
 
-	sort.Slice(ok, func(i, j int) bool { return ok[i].Name < ok[j].Name })
+	byName := make(map[string][]Workflow)
+	for _, wf := range ok {
+		byName[wf.Name] = append(byName[wf.Name], wf)
+	}
+	duplicates := make(map[string]*DuplicateNameError)
+	for name, files := range byName {
+		if len(files) < 2 {
+			continue
+		}
+		relative := make([]string, 0, len(files))
+		for _, wf := range files {
+			path, err := filepath.Rel(dir, wf.Path)
+			if err != nil {
+				path = wf.Path
+			}
+			relative = append(relative, filepath.ToSlash(path))
+		}
+		sort.Strings(relative)
+		duplicates[name] = &DuplicateNameError{Name: name, Files: relative}
+	}
+	if len(duplicates) > 0 {
+		unique := ok[:0]
+		for _, wf := range ok {
+			if duplicateErr := duplicates[wf.Name]; duplicateErr != nil {
+				bad = append(bad, ScanError{Path: wf.Path, Err: duplicateErr})
+				continue
+			}
+			unique = append(unique, wf)
+		}
+		ok = unique
+	}
+	sort.Slice(ok, func(i, j int) bool {
+		if ok[i].Name == ok[j].Name {
+			return ok[i].Path < ok[j].Path
+		}
+		return ok[i].Name < ok[j].Name
+	})
+	sort.Slice(bad, func(i, j int) bool { return bad[i].Path < bad[j].Path })
 	return ok, bad
 }
 
@@ -959,6 +980,16 @@ func loadWebhookApproval(config *WebhookApproval) error {
 	config.policy = policy
 	config.Methods = policy.Methods()
 	return nil
+}
+
+// DuplicateNameError reports a workflow name shared by multiple files.
+type DuplicateNameError struct {
+	Name  string
+	Files []string
+}
+
+func (e *DuplicateNameError) Error() string {
+	return fmt.Sprintf("workflow %q: name is defined in %d files (%s)", e.Name, len(e.Files), strings.Join(e.Files, ", "))
 }
 
 type ScanError struct {

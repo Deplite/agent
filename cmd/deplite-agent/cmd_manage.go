@@ -663,17 +663,10 @@ func bufferName(name, path string) string {
 }
 
 func checkNewWorkflowTarget(dir, name string) error {
-	wfs, _ := workflow.Scan(dir)
-	var existing []workflow.Workflow
-	for _, wf := range wfs {
-		if wf.Name == name {
-			existing = append(existing, wf)
-		}
-	}
-	if len(existing) > 0 {
-		paths := make([]string, len(existing))
-		for i := range existing {
-			paths[i] = relativeWorkflowPath(dir, existing[i].Path)
+	wfs, bad := workflow.Scan(dir)
+	if paths := workflowNameFiles(dir, wfs, bad)[name]; len(paths) > 0 {
+		if len(paths) > 1 {
+			return fmt.Errorf("이름이 같은 워크플로우가 이미 여러 개 있습니다: %s (%s). 중복을 먼저 정리해주세요", name, strings.Join(paths, ", "))
 		}
 		return fmt.Errorf("이미 있는 워크플로우입니다: %s (%s). 고치려면 deplite-agent edit %s 을 사용해주세요", name, strings.Join(paths, ", "), name)
 	}
@@ -689,11 +682,13 @@ func checkNewWorkflowTarget(dir, name string) error {
 }
 
 func checkDuplicateName(dir, name, exclude string) error {
-	wfs, _ := workflow.Scan(dir)
+	wfs, bad := workflow.Scan(dir)
+	files := workflowNameFiles(dir, wfs, bad)[name]
 	paths := make([]string, 0)
-	for _, wf := range wfs {
-		if wf.Name == name && !sameWorkflowPath(dir, wf.Path, exclude) {
-			paths = append(paths, relativeWorkflowPath(dir, wf.Path))
+	for _, file := range files {
+		path := filepath.Join(dir, filepath.FromSlash(file))
+		if !sameWorkflowPath(dir, path, exclude) {
+			paths = append(paths, file)
 		}
 	}
 	if len(paths) == 0 {
@@ -716,17 +711,14 @@ func sameWorkflowPath(dir, left, right string) bool {
 
 func resolveWorkflowTarget(dir, arg string) (string, string, error) {
 	wfs, bad := workflow.Scan(dir)
-	var named []workflow.Workflow
+	filesByName := workflowNameFiles(dir, wfs, bad)
+	if paths := filesByName[arg]; len(paths) > 1 {
+		return "", "", duplicateWorkflowNameError(arg, paths, false)
+	}
 	for _, wf := range wfs {
 		if wf.Name == arg {
-			named = append(named, wf)
+			return wf.Path, wf.Name, nil
 		}
-	}
-	if len(named) > 1 {
-		return "", "", duplicateWorkflowNameError(dir, arg, named, false)
-	}
-	if len(named) == 1 {
-		return named[0].Path, named[0].Name, nil
 	}
 	if workflow.ValidName(arg) {
 		for _, ext := range []string{".yml", ".yaml"} {
@@ -749,6 +741,9 @@ func resolveWorkflowTarget(dir, arg string) (string, string, error) {
 		inside := relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 		if inside {
 			if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+				if duplicateNameForPath(dir, bad, candidate) != "" {
+					return candidate, "", nil
+				}
 				wf, err := workflow.LoadFile(candidate)
 				if err == nil {
 					return candidate, wf.Name, nil
@@ -762,27 +757,20 @@ func resolveWorkflowTarget(dir, arg string) (string, string, error) {
 }
 
 func loadWorkflowForCopy(dir, name string) (workflow.Workflow, error) {
-	wfs, _ := workflow.Scan(dir)
-	var named []workflow.Workflow
+	wfs, bad := workflow.Scan(dir)
+	if paths := workflowNameFiles(dir, wfs, bad)[name]; len(paths) > 1 {
+		return workflow.Workflow{}, duplicateWorkflowNameError(name, paths, true)
+	}
 	for _, wf := range wfs {
 		if wf.Name == name {
-			named = append(named, wf)
+			return wf, nil
 		}
-	}
-	if len(named) > 1 {
-		return workflow.Workflow{}, duplicateWorkflowNameError(dir, name, named, true)
-	}
-	if len(named) == 1 {
-		return named[0], nil
 	}
 	return agent.LoadWorkflow(dir, name)
 }
 
-func duplicateWorkflowNameError(dir, name string, matches []workflow.Workflow, copying bool) error {
-	paths := make([]string, 0, len(matches))
-	for _, wf := range matches {
-		paths = append(paths, relativeWorkflowPath(dir, wf.Path))
-	}
+func duplicateWorkflowNameError(name string, paths []string, copying bool) error {
+	paths = append([]string(nil), paths...)
 	sort.Strings(paths)
 	message := fmt.Sprintf("이름이 같은 워크플로우가 여러 개입니다: %s (%s). ", name, strings.Join(paths, ", "))
 	if copying {
@@ -791,6 +779,33 @@ func duplicateWorkflowNameError(dir, name string, matches []workflow.Workflow, c
 		message += "파일 경로로 지정해주세요"
 	}
 	return errors.New(message)
+}
+
+func workflowNameFiles(dir string, wfs []workflow.Workflow, bad []workflow.ScanError) map[string][]string {
+	files := make(map[string][]string)
+	for _, wf := range wfs {
+		files[wf.Name] = append(files[wf.Name], filepath.ToSlash(relativeWorkflowPath(dir, wf.Path)))
+	}
+	for _, entry := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if errors.As(entry.Err, &duplicate) {
+			files[duplicate.Name] = append([]string(nil), duplicate.Files...)
+		}
+	}
+	for name := range files {
+		sort.Strings(files[name])
+	}
+	return files
+}
+
+func duplicateNameForPath(dir string, bad []workflow.ScanError, path string) string {
+	for _, entry := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if errors.As(entry.Err, &duplicate) && sameWorkflowPath(dir, entry.Path, path) {
+			return duplicate.Name
+		}
+	}
+	return ""
 }
 
 func atomicCreateWorkflow(dir, target string, body []byte, mode os.FileMode) error {

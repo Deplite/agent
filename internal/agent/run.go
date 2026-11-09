@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -139,15 +140,30 @@ func Start(ctx context.Context, opts StartOptions) error {
 	return err
 }
 
-// reportWorkflows publishes the catalog view of every workflow in dir.
-// The report replaces the server-side set, so an empty one is only sent
-// when the directory genuinely holds no workflow: a missing directory or
-// a batch where every file failed to load leaves the existing catalog
-// alone rather than wiping it over a typo in --workflows-dir.
+// Reports replace the server catalog, so a bad --workflows-dir must not clear it.
+// Invalid names are still reported so the server can store their reasons.
 func reportWorkflows(ctx context.Context, c *apiclient.Client, s apiclient.Signer, dir string, state *stateWriter, log *slog.Logger) {
 	wfs, bad := workflow.Scan(dir)
+	invalidByName := make(map[string]*workflow.DuplicateNameError)
 	for _, e := range bad {
+		var duplicate *workflow.DuplicateNameError
+		if errors.As(e.Err, &duplicate) {
+			invalidByName[duplicate.Name] = duplicate
+			continue
+		}
 		log.Error("workflow load failed", "path", e.Path, "error", e.Err)
+	}
+	invalidNames := make([]string, 0, len(invalidByName))
+	for name := range invalidByName {
+		invalidNames = append(invalidNames, name)
+	}
+	sort.Strings(invalidNames)
+	invalid := make([]apiclient.InvalidWorkflow, 0, len(invalidNames))
+	for _, name := range invalidNames {
+		duplicate := invalidByName[name]
+		item := apiclient.InvalidWorkflow{Name: name, Code: "duplicate_name", Reason: duplicate.Error(), Files: duplicate.Files}
+		invalid = append(invalid, item)
+		log.Warn("workflow name is invalid", "workflow", name, "code", item.Code, "reason", item.Reason, "files", item.Files)
 	}
 	state.update(func(r *RunState) {
 		r.WorkflowsReported = len(wfs)
@@ -158,7 +174,7 @@ func reportWorkflows(ctx context.Context, c *apiclient.Client, s apiclient.Signe
 			log.Error("workflows directory unreadable; keeping the existing catalog", "dir", dir, "error", err)
 			return
 		}
-		if len(bad) > 0 {
+		if len(bad) > 0 && len(invalid) == 0 {
 			log.Error("every workflow file failed to load; keeping the existing catalog", "dir", dir, "failed", len(bad))
 			return
 		}
@@ -167,13 +183,24 @@ func reportWorkflows(ctx context.Context, c *apiclient.Client, s apiclient.Signe
 	for _, w := range wfs {
 		reported = append(reported, catalogView(w))
 	}
-	res, err := c.ReportWorkflows(ctx, s, reported)
+	res, err := c.ReportWorkflows(ctx, s, reported, invalid)
 	if err != nil {
 		log.Warn("workflow report failed", "error", err)
 		return
 	}
 	for _, r := range res.Rejected {
 		log.Warn("workflow rejected by server", "workflow", r.Name, "code", r.Code, "reason", r.Reason)
+	}
+	if res.Invalid != nil {
+		recorded := make(map[string]bool, len(res.Invalid))
+		for _, name := range res.Invalid {
+			recorded[name] = true
+		}
+		for _, item := range invalid {
+			if !recorded[item.Name] {
+				log.Warn("backend did not record invalid workflow", "workflow", item.Name, "code", item.Code, "reason", item.Reason)
+			}
+		}
 	}
 	log.Info("workflows reported", "count", res.Count, "rejected", len(res.Rejected))
 }
@@ -396,7 +423,7 @@ func runOneJob(ctx context.Context, c *apiclient.Client, s apiclient.Signer, pay
 	// Guarantee every runOneJob exit forgets the job, including the early
 	// reject returns below (workflow not found, force checks, rate limit).
 	defer tracker.finish(payload.JobID)
-	wfs, _ := workflow.Scan(wfDir)
+	wfs, bad := workflow.Scan(wfDir)
 	var wf *workflow.Workflow
 	for i := range wfs {
 		if wfs[i].Name == payload.WorkflowName {
@@ -405,9 +432,17 @@ func runOneJob(ctx context.Context, c *apiclient.Client, s apiclient.Signer, pay
 		}
 	}
 	if wf == nil {
+		message := "workflow not found: " + payload.WorkflowName
+		for _, entry := range bad {
+			var duplicate *workflow.DuplicateNameError
+			if errors.As(entry.Err, &duplicate) && duplicate.Name == payload.WorkflowName {
+				message = fmt.Sprintf("workflow %q is invalid: name is defined in %d files (%s)", duplicate.Name, len(duplicate.Files), strings.Join(duplicate.Files, ", "))
+				break
+			}
+		}
 		_, _ = c.ReportJobResult(ctx, s, payload.JobID, apiclient.JobResult{
 			Status:       apiclient.JobFailed,
-			ErrorMessage: "workflow not found: " + payload.WorkflowName,
+			ErrorMessage: message,
 		})
 		return
 	}

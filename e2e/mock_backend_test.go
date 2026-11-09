@@ -265,6 +265,7 @@ func (m *mockBackend) handleHeartbeat(w http.ResponseWriter, _ *http.Request, bo
 func (m *mockBackend) handleWorkflowsReport(w http.ResponseWriter, _ *http.Request, body []byte) {
 	var req struct {
 		Workflows []json.RawMessage `json:"workflows"`
+		Invalid   []json.RawMessage `json:"invalid"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, `{"error":"bad report body"}`, http.StatusBadRequest)

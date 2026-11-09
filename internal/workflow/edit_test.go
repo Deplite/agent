@@ -115,15 +115,3 @@ func TestSetNameRejectsUnsupportedTokens(t *testing.T) {
 		}
 	}
 }
-
-func TestDuplicateNames(t *testing.T) {
-	got := DuplicateNames([]Workflow{
-		{Name: "same", Path: "z.yml"},
-		{Name: "other", Path: "other.yml"},
-		{Name: "same", Path: "a.yml"},
-	})
-	want := map[string][]string{"same": {"a.yml", "z.yml"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("DuplicateNames() = %#v, want %#v", got, want)
-	}
-}

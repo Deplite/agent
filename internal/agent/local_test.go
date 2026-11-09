@@ -93,6 +93,25 @@ func TestLoadWorkflowNamesAlternatives(t *testing.T) {
 	}
 }
 
+func TestLoadWorkflowRejectsDuplicateNames(t *testing.T) {
+	dir := t.TempDir()
+	body := []byte("name: hello\nsteps:\n  - name: run\n    run: echo hi\n")
+	if err := os.WriteFile(filepath.Join(dir, "hello.yml"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "team"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "team", "hello.yml"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadWorkflow(dir, "hello")
+	want := `워크플로우 "hello" 는 같은 이름의 파일이 여러 개라 무효입니다: hello.yml, team/hello.yml`
+	if err == nil || err.Error() != want {
+		t.Fatalf("LoadWorkflow error = %v, want %q", err, want)
+	}
+}
+
 func TestLocalSecretsPrefersExplicitOverride(t *testing.T) {
 	t.Setenv("DEPLITE_SECRET_FROM_ENV", "env-value")
 	t.Setenv("DEPLITE_SECRET_OVERRIDDEN", "env-value")
