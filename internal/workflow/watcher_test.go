@@ -70,6 +70,18 @@ func TestWatchNestedDirectories(t *testing.T) {
 	})
 }
 
+func TestWatchSymlinkRoot(t *testing.T) {
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "workflows")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	changes, stop := startWorkflowWatch(t, link)
+	writeWatchFile(t, filepath.Join(link, "deploy.yml"))
+	waitWorkflowChange(t, changes)
+	stop()
+}
+
 func startWorkflowWatch(t *testing.T, dir string) (<-chan struct{}, func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())

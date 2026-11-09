@@ -65,6 +65,23 @@ steps:
 	}
 }
 
+func TestScanFollowsSymlinkRootAndKeepsLinkPaths(t *testing.T) {
+	target := t.TempDir()
+	writeFile(t, target, "hello.yml", "name: hello\nsteps:\n  - name: run\n    run: echo hi\n")
+	link := filepath.Join(t.TempDir(), "workflows")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	wfs, bad := Scan(link)
+	if len(bad) != 0 || len(wfs) != 1 {
+		t.Fatalf("Scan(%q) = %d workflows, %v errors", link, len(wfs), bad)
+	}
+	want := filepath.Join(link, "hello.yml")
+	if wfs[0].Path != want {
+		t.Fatalf("workflow path = %q, want path under link %q", wfs[0].Path, want)
+	}
+}
+
 func TestScanReadsFullSchema(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "deploy.yml", `

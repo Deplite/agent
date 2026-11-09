@@ -863,10 +863,17 @@ func validateRetry(wfName, where string, r Retry) error {
 func Scan(dir string) ([]Workflow, []ScanError) {
 	var ok []Workflow
 	var bad []ScanError
+	walkRoot := dir
+	rootPath := filepath.Clean(dir)
+	if info, err := os.Lstat(rootPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if target, err := os.Stat(rootPath); err == nil && target.IsDir() {
+			walkRoot = rootPath + string(os.PathSeparator)
+		}
+	}
 
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) && path == dir {
+			if errors.Is(err, fs.ErrNotExist) && filepath.Clean(path) == rootPath {
 				return nil
 			}
 			bad = append(bad, ScanError{Path: path, Err: err})

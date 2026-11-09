@@ -75,9 +75,16 @@ func Watch(ctx context.Context, dir string, debounce time.Duration, out chan<- s
 }
 
 func addTree(w *fsnotify.Watcher, dir string, watched map[string]bool, requireRoot bool) error {
-	return filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+	walkRoot := dir
+	rootPath := filepath.Clean(dir)
+	if info, err := os.Lstat(rootPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if target, err := os.Stat(rootPath); err == nil && target.IsDir() {
+			walkRoot = rootPath + string(filepath.Separator)
+		}
+	}
+	return filepath.WalkDir(walkRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			if path == dir {
+			if filepath.Clean(path) == rootPath {
 				return err
 			}
 			return nil
@@ -85,11 +92,12 @@ func addTree(w *fsnotify.Watcher, dir string, watched map[string]bool, requireRo
 		if !entry.IsDir() {
 			return nil
 		}
-		if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink != 0 {
+		isRoot := filepath.Clean(path) == rootPath
+		if info, err := os.Lstat(path); err != nil || (info.Mode()&os.ModeSymlink != 0 && !isRoot) {
 			return filepath.SkipDir
 		}
 		if err := w.Add(path); err != nil {
-			if requireRoot && path == dir {
+			if requireRoot && isRoot {
 				return err
 			}
 		} else if watched != nil {
