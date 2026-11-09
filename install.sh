@@ -105,7 +105,7 @@ main() {
       || (cd "$tmpdir" && grep " $asset\$" checksums.txt | shasum -a 256 -c -) \
       || fail "checksum verification failed"
   else
-    warn "checksums.txt not found; skipping verification"
+    fail "could not download checksums.txt; refusing to install without verification"
   fi
 
   info "Extracting"
