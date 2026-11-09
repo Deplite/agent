@@ -59,16 +59,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 
 	host, _ := osHostname()
-	if err := client.UpdateIdentity(ctx, signer, apiclient.IdentityPatch{
+	state := newStateWriter(opts.DataDir, opts.Version)
+	defer state.remove()
+	updateIdentity(ctx, client, signer, apiclient.IdentityPatch{
 		Hostname:     host,
 		OS:           runtime.GOOS + "/" + runtime.GOARCH,
 		AgentVersion: opts.Version,
-	}); err != nil {
-		log.Warn("identity update failed", "error", err)
-	}
-
-	state := newStateWriter(opts.DataDir, opts.Version)
-	defer state.remove()
+	}, log)
 
 	reportWorkflows(ctx, client, signer, wfDir, state, log)
 
@@ -138,6 +135,12 @@ func Start(ctx context.Context, opts StartOptions) error {
 		<-jobsDone
 	}
 	return err
+}
+
+func updateIdentity(ctx context.Context, client *apiclient.Client, signer apiclient.Signer, patch apiclient.IdentityPatch, log *slog.Logger) {
+	if err := client.UpdateIdentity(ctx, signer, patch); err != nil {
+		log.Warn("identity update failed", "error", err)
+	}
 }
 
 // Reports replace the server catalog, so a bad --workflows-dir must not clear it.

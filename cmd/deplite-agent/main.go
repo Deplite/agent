@@ -65,6 +65,8 @@ func main() {
 		os.Exit(runDoctor(args))
 	case "logs":
 		os.Exit(runLogs(args))
+	case "update":
+		os.Exit(runUpdate(args))
 	case "limits":
 		os.Exit(runLimits(args))
 	case "version", "-v", "--version":
@@ -271,6 +273,7 @@ func usage(w *os.File) {
 
 설치와 실행
   install     이 머신을 등록하고 systemd 서비스를 설정합니다
+  update      GitHub Releases에서 Agent를 업데이트합니다
   start       Agent를 실행해 대시보드가 보내는 작업을 처리합니다
   uninstall   systemd 서비스와 이 머신의 자격증명·로컬 상태를 지웁니다
 
